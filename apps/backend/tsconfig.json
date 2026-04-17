@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@/domain/*": ["./src/domain/*"],
+      "@/application/*": ["./src/application/*"],
+      "@/ports/*": ["./src/ports/*"],
+      "@/adapters/*": ["./src/adapters/*"],
+      "@/infrastructure/*": ["./src/infrastructure/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

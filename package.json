@@ -1,0 +1,31 @@
+{
+  "name": "smooth-fs",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.12",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/bun": "^1.3.2",
+    "eslint": "^9.39.2",
+    "eslint-plugin-vue": "^10.7.0",
+    "globals": "^17.0.0",
+    "prettier": "^3.7.4",
+    "turbo": "^2.7.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.53.1",
+    "vue-eslint-parser": "^10.2.0"
+  }
+}

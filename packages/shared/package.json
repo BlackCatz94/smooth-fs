@@ -1,0 +1,23 @@
+{
+  "name": "@smoothfs/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "bun run typecheck && bun -e \"await Bun.write('dist/.build-stamp', new Date().toISOString())\"",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --config ../../eslint.config.js ."
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
