@@ -1,0 +1,40 @@
+---
+description: Testing conventions for backend, frontend, and E2E
+globs: **/*.{test,spec}.{ts,tsx,vue}
+alwaysApply: false
+---
+
+# Testing
+
+## Where tests live
+
+- Backend unit + integration: colocated `*.test.ts` next to source (`apps/backend/src/**`).
+- Frontend unit: colocated `*.spec.ts` next to components/composables.
+- E2E: `apps/frontend/e2e/*.spec.ts` (Playwright).
+
+## Backend (`bun test`)
+
+- **Unit:** test domain + application layers with **in-memory fake repositories** implementing the port. No DB.
+- **Integration:** spin up Postgres (Docker or `pg-mem` when sufficient), run migrations, test real adapter + use-case.
+- Name tests by behavior, not by function: `"listChildren returns empty page for a leaf folder"`.
+
+## Frontend (Vitest + Vue Test Utils)
+
+- Test the custom tree component thoroughly: expand/collapse, lazy load, keyboard nav, virtualization correctness (visible rows match expectations).
+- Mock the API client at the module boundary, not individual `fetch` calls.
+- Assert accessibility basics (roles, aria-expanded) on the tree.
+
+## E2E (Playwright)
+
+Minimum flow:
+
+1. Load app → root folders visible.
+2. Expand a folder → children appear (no full reload).
+3. Click a folder → right panel lists its direct children and files.
+4. Search → results highlight matching folders.
+
+## Reliability rules
+
+- No `test.skip` or `.only` in committed code.
+- No arbitrary `setTimeout` waits in Playwright; use `expect(locator).toBeVisible()` auto-waiting.
+- Every bug fix lands with a regression test.

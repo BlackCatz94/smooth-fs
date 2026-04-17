@@ -1,0 +1,42 @@
+---
+description: Vue 3 Composition API, Pinia, and smooth custom-tree patterns
+globs: apps/frontend/**/*.{ts,vue}
+alwaysApply: false
+---
+
+# Frontend — Vue 3 & Custom Tree
+
+## Component rules
+
+- **Composition API only.** Use `<script setup lang="ts">`. No Options API, no mixins.
+- Props and emits are explicitly typed (`defineProps<Props>()`, `defineEmits<E>()`).
+- Extract reusable logic into composables under `src/composables/` (`useFolderTree`, `useKeyboardNav`).
+- Keep components small; split by responsibility (presentation vs. data-fetching).
+
+## State (Pinia)
+
+- One store per bounded concern: `useTreeStore`, `useSelectionStore`, `useSearchStore`.
+- Stores own server data + UI state; components stay dumb where possible.
+- Never mutate another store's state from a component — call its actions.
+
+## Custom tree — smoothness rules
+
+The tree lives under `apps/frontend/src/tree/` and is treated like an internal library (stable API, no app-specific logic).
+
+- **Recursive component:** `<FolderNode />` calls `<FolderNode />` for children. No pre-built tree lib.
+- **Lazy load:** Children are fetched only when a node is expanded, via `useTreeStore.expand(id)`.
+- **Virtualize:** For any list that can exceed ~200 rows (flattened siblings or a flattened visible tree), render through `vue-virtual-scroller`. Don't render off-screen nodes.
+- **Stable keys:** Always key nodes by `id`. Never by index.
+- **Cache:** Cache fetched children per parent id in the store; invalidate on mutation, not on every render.
+- **No deep watchers** over the whole tree; prefer per-node reactivity (reactive maps keyed by id).
+- **No heavy work in render:** Memoize expensive computeds; avoid filtering huge arrays in templates.
+
+## Reliability & debuggability
+
+- All API calls go through a single `apiClient` with timeouts, error normalization, and a `requestId` header.
+- Surface errors with user-readable messages and log structured details (node id, operation) to the console in dev.
+- Use `VITE_*` env vars for config; never hardcode URLs.
+
+## Styling
+
+Tailwind utility-first. Shared primitives (buttons, menus) use Headless UI or Radix Vue. Icons via `lucide-vue-next`.

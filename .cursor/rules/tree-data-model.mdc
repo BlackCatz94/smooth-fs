@@ -1,0 +1,65 @@
+---
+description: Adjacency-list schema and Recursive CTE patterns for folder queries
+globs: apps/backend/src/{domain,adapters/db,application}/**/*.ts
+alwaysApply: false
+---
+
+# Tree Data Model
+
+## Schema — Adjacency List
+
+`folders` table:
+
+- `id` (uuid, pk)
+- `parent_id` (uuid, nullable, fk → folders.id, `ON DELETE CASCADE`)
+- `name` (text, not null)
+- `created_at`, `updated_at` timestamps
+
+`files` table: analogous, with `folder_id` fk.
+
+## Required indexes
+
+- `folders (parent_id)` — children lookup.
+- `folders (parent_id, name)` — sorted sibling pagination + uniqueness.
+- `files (folder_id)` — right-panel loads.
+- GIN trigram index on `folders.name` and `files.name` if using `ILIKE`/fuzzy search.
+
+Every new query must be explained with `EXPLAIN ANALYZE` if it touches >1k rows. No sequential scans on hot paths.
+
+## Querying unlimited depth
+
+Use **Recursive CTEs**, not N round-trips:
+
+```sql
+WITH RECURSIVE subtree AS (
+  SELECT id, parent_id, name, 0 AS depth
+  FROM folders
+  WHERE id = $1
+  UNION ALL
+  SELECT f.id, f.parent_id, f.name, s.depth + 1
+  FROM folders f
+  JOIN subtree s ON f.parent_id = s.id
+  WHERE s.depth < $2        -- always cap depth
+)
+SELECT * FROM subtree;
+```
+
+Rules:
+
+- **Always cap depth** on recursive queries (`depth < $n`) to prevent runaway scans.
+- For the initial load, return only the root + first level. Deeper levels are fetched on expand.
+- Use **keyset/cursor pagination** for children, not `OFFSET` (offset is O(n) at depth).
+
+## Repository contract
+
+Define pure interfaces in `ports/`; Drizzle lives behind them:
+
+```ts
+export interface FolderRepository {
+  getById(id: string): Promise<Folder | null>;
+  listChildren(input: { parentId: string; cursor?: string; limit: number }): Promise<Page<Folder>>;
+  search(q: string, limit: number): Promise<Folder[]>;
+}
+```
+
+Services depend on this, never on Drizzle directly.

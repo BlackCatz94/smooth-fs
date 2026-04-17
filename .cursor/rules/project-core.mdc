@@ -1,0 +1,45 @@
+---
+description: SmoothFS project goals, stack, repo layout, and hard constraints
+alwaysApply: true
+---
+
+# SmoothFS — Project Core
+
+A high-performance, web-based Windows Explorer clone with unlimited folder depth.
+
+## Non-negotiable targets
+
+Every change must serve these, in order:
+
+1. **Smooth** — no dropped frames, no DOM thrash, no N+1 queries. Virtualize, paginate, lazy-load.
+2. **Reliable** — strict types end-to-end, validated inputs, explicit errors, tests at each layer.
+3. **Debuggable** — structured logs with correlation IDs, meaningful error messages, env-driven config, no silent catches.
+
+If a change trades one of these for convenience, call it out explicitly.
+
+## Stack (strict)
+
+- **Runtime:** Bun. **Language:** TypeScript everywhere (`strict: true`).
+- **Monorepo:** Bun Workspaces — `apps/frontend`, `apps/backend`, `packages/shared`.
+- **Backend:** Elysia.js, Hex/Clean Architecture, Drizzle ORM, PostgreSQL.
+- **Frontend:** Vue 3 (Composition API only), Vite, Pinia, Tailwind, Headless UI / Radix Vue, Lucide-Vue.
+- **Testing:** `bun test` (backend), Vitest + Vue Test Utils (frontend unit), Playwright (E2E).
+
+## Shared types
+
+Cross-cutting types (`FolderNode`, `FileNode`, DTOs) live in `packages/shared` and are imported by both apps. Never redeclare them.
+
+## Restricted libraries — hard ban
+
+Do NOT install or import any pre-built tree/file-explorer/nested-list component:
+`vue3-tree-vue`, `sl-vue-tree`, `vue-jstree`, Vuetify `<v-treeview>`, Element Plus `<el-tree>`, PrimeVue `Tree`/`TreeTable`, Quasar `QTree`, or equivalents.
+
+The folder tree is built from scratch as a custom recursive Vue component, isolated as a reusable module under `apps/frontend/src/tree/`.
+
+## Allowed helpers
+
+Tailwind, Headless UI, Radix Vue, Lucide-Vue, Pinia, VueUse, native `fetch` (prefer over Axios unless justified), and `vue-virtual-scroller` for virtualization.
+
+## Disagree loudly
+
+If a task conflicts with these targets or the PRD, stop and surface the trade-off before coding.

@@ -1,0 +1,56 @@
+---
+description: Hexagonal architecture, SOLID, and REST conventions for the Elysia backend
+globs: apps/backend/**/*.ts
+alwaysApply: false
+---
+
+# Backend — Hex Architecture
+
+## Layer layout
+
+```
+apps/backend/src/
+  domain/          # Entities, value objects, domain errors. Zero framework/ORM imports.
+  application/     # Use-cases (services). Depend on ports, not adapters.
+  ports/           # Interfaces (e.g. FolderRepository). Application-owned contracts.
+  adapters/
+    db/            # Drizzle implementations of ports
+    http/          # Elysia controllers, request/response schemas
+  infrastructure/  # Bootstrap, DI wiring, config, logger
+```
+
+Dependency direction is strictly inward: `adapters → application → domain`. Domain never imports from adapters.
+
+## SOLID in practice
+
+- **SRP:** One use-case per file (`listChildren.ts`, `searchFolders.ts`). Controllers only translate HTTP ↔ use-case input/output.
+- **DIP:** Services take port interfaces via constructor injection. No `new DrizzleFolderRepo()` inside services.
+- **OCP:** Add a new storage or search backend by implementing a port, not by editing the service.
+
+## REST conventions
+
+- Base path: `/api/v1`. Resource-based URIs: `/folders`, `/folders/:id/children`, `/folders/search`.
+- Verbs: `GET` read, `POST` create, `PUT`/`PATCH` update, `DELETE` remove.
+- Status codes: `200`, `201`, `204`, `400`, `404`, `409`, `422`, `500`. No `200 { error }`.
+- Validate every input with Elysia's schema (`t.Object`) — never trust params/body.
+- Paginate list endpoints with cursor params (`?cursor=&limit=`); default and cap `limit`.
+
+## Reliability & debuggability
+
+- Throw typed domain errors (`FolderNotFoundError`); map to HTTP in one place (error handler middleware).
+- Every request gets a `requestId` (header or generated); include it in every log line and error response.
+- Use a structured logger (e.g. `pino`). No `console.log` in committed code outside `infrastructure/logger`.
+- All config via env vars loaded/validated once at startup. Fail fast on missing config.
+
+## Example — wiring a use-case
+
+```ts
+export class ListChildren {
+  constructor(private readonly folders: FolderRepository) {}
+  async exec(input: { parentId: string; cursor?: string; limit: number }) {
+    return this.folders.listChildren(input);
+  }
+}
+```
+
+Controller calls `new ListChildren(repo).exec(parsed)` — no business logic in the controller.
