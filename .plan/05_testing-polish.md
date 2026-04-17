@@ -47,3 +47,9 @@ Lock in correctness, performance confidence, and operational debuggability befor
 - **E2E environment:** mock API mode for determinism vs real backend for fidelity.
 - **Performance gate policy:** hard CI thresholds vs report-only trend tracking in early iterations.
 - **Coverage target strictness:** fixed percentage gate now vs phase-in by module criticality.
+
+User's Choice:
+- Real PostgreSQL CI (Docker (installed) or Github Actions)
+- Real backend with deterministic seeded database
+- Report only trend tracking
+- Strict coverage for Domain/Services/Algorithm, lower for UI wrappers

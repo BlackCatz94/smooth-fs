@@ -47,3 +47,9 @@ Establish PostgreSQL schema and hexagonal backend structure that supports unlimi
 - **Recursive query strategy boundary:** one generalized CTE utility vs endpoint-specific CTE queries.
 - **Delete semantics:** hard cascade delete vs soft delete + background cleanup for folders/files.
 - **Root modeling:** `parent_id = NULL` roots vs synthetic root node (affects query ergonomics and API shape).
+
+User's Choice:
+- Drizzle ORM
+- Endpoint specific CTE queries (encapsulated in the repository layer)
+- Soft delete + background cleanup
+- parent_id = NULL for root folders

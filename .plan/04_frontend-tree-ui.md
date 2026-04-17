@@ -48,3 +48,9 @@ Build a custom, maintainable tree UI (from scratch) that handles deep and large 
 - **State persistence depth:** persist only selected node vs selected + expanded path.
 - **Prefetch policy:** fetch children only on click vs prefetch siblings/next page opportunistically.
 - **Selection semantics:** selecting a folder auto-expands it vs selection and expansion remain independent.
+
+User's Choice:
+- Flatten visible tree rows globally (1D array - avoid DOM nightmare)
+- Persist selected node + its expanded path
+- Fetch children only on click
+- Selection and expansion strictly independent (try to follow Windows Explorer UX behaviours)

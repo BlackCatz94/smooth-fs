@@ -41,3 +41,9 @@ Deliver REST endpoints and scalable data access patterns for tree browsing, chil
 - **Search semantics:** prefix-only, substring, or fuzzy ranking (impacts index strategy and UX expectations).
 - **Pagination cursor format:** opaque signed token vs encoded last-seen tuple (security/compatibility trade-off).
 - **Combined contents endpoint:** single endpoint for folders+files vs separate endpoints composed by frontend.
+
+User's Choice:
+- Definitely Redis
+- Substring search backed by a trigram index (or fuzzy? is it overkill? - use ask tool on next plan to confirm this)
+- Encoded last-seen tuple
+- Single endpoint for folders + files

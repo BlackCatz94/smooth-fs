@@ -41,3 +41,14 @@ Set up the baseline workspace so all future features can be built consistently a
 - **Monorepo tooling scope:** Bun workspace only vs Bun workspace + Turborepo task orchestration.
 - **Path alias policy:** only shared-package aliases vs deep aliases per app (trade-off: clarity vs convenience).
 - **Single source of env schema:** one centralized schema package vs per-app schemas (trade-off: consistency vs app autonomy).
+
+User's Choice:
+- Use Bun workspace + Turborepo (Bun workspaces handle dependency linking, Turborepo handles task orchestration (caching, parallel execution))
+
+- Deep aliases per app (@/services, @/domain, etc.) + shared package via npm scope (@smoothfs/shared)
+Example:
+FE: @/components, @/composables, @/stores
+BE: @/domain, @/ports, @/adapters, @/services
+Cross: @smoothfs/shared
+
+- Definitely per-app schemas for SOLID principles
