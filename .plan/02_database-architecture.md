@@ -14,14 +14,15 @@ Establish PostgreSQL schema and hexagonal backend structure that supports unlimi
 
 - Provision PostgreSQL locally for development.
 - Choose ORM implementation (default: Drizzle ORM) and create migration baseline.
-- Implement adjacency-list schema:
-  - `folders(id, parent_id, name, created_at, updated_at)`
-  - `files(id, folder_id, name, created_at, updated_at)`
+- Implement adjacency-list schema with soft-delete columns:
+  - `folders(id, parent_id, name, created_at, updated_at, deleted_at)`
+  - `files(id, folder_id, name, created_at, updated_at, deleted_at)`
 - Add required indexes:
   - `folders(parent_id)`
   - `folders(parent_id, name)`
+  - `folders(deleted_at)` and `files(deleted_at)` to keep cleanup batches cheap
   - `files(folder_id)`
-  - optional trigram indexes when fuzzy search is enabled
+  - optional trigram indexes when fuzzy search is enabled (deferred to Phase 3+)
 - Scaffold backend layers:
   - `domain/`
   - `application/`
