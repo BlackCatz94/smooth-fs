@@ -225,11 +225,6 @@ describe('DrizzleFolderRepository', () => {
     }
   });
 
-  it('restore is not implemented in Phase 2', async () => {
-    if (!harness) return;
-    const repo = new DrizzleFolderRepository(harness.handle, timing);
-    await expect(repo.restore('any-id')).rejects.toThrow(/not implemented in Phase 2/);
-  });
 });
 
 describe('DrizzleCleanupRepository', () => {

@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import {
   DepthLimitExceededError,
   DomainError,
+  FolderNotDeletedError,
   FolderNotFoundError,
   InvalidCursorError,
   InvalidInputError,
@@ -15,6 +16,7 @@ export interface MappedError {
 
 function statusFor(err: DomainError): number {
   if (err instanceof FolderNotFoundError) return 404;
+  if (err instanceof FolderNotDeletedError) return 409;
   if (err instanceof InvalidCursorError) return 400;
   if (err instanceof DepthLimitExceededError) return 422;
   if (err instanceof InvalidInputError) return 422;

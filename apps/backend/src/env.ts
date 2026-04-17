@@ -12,6 +12,8 @@ const envSchema = z.object({
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(100).max(300_000).default(5_000),
   /** DB operations slower than this threshold are logged at `warn` level. */
   DB_SLOW_QUERY_MS: z.coerce.number().int().min(1).max(60_000).default(200),
+  /** HTTP requests slower than this threshold emit a `warn` with path + ms. */
+  HTTP_SLOW_REQUEST_MS: z.coerce.number().int().min(1).max(60_000).default(500),
 
   REDIS_URL: z.string().min(1, 'REDIS_URL is required (e.g. redis://127.0.0.1:6379)'),
 
@@ -25,6 +27,18 @@ const envSchema = z.object({
   CLEANUP_BATCH_SIZE: z.coerce.number().int().min(1).max(100_000).default(500),
   /** Standard 5-field cron expression; BullMQ's repeat.pattern */
   CLEANUP_CRON: z.string().min(1).default('0 3 * * *'),
+
+  /**
+   * Phase 3 Redis cache. Defaults to OFF so integration tests and local dev
+   * don't accidentally depend on a live Redis; enable explicitly in staging/prod.
+   * Uses a separate logical DB from the BullMQ queue to isolate blast radius.
+   */
+  ENABLE_CACHE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  CACHE_REDIS_DB: z.coerce.number().int().min(0).max(15).default(1),
+  CACHE_TTL_MS: z.coerce.number().int().min(100).max(24 * 60 * 60 * 1000).default(60_000),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -69,12 +83,16 @@ export function loadEnv(): AppEnv {
     DB_POOL_MAX: pickString('DB_POOL_MAX'),
     DB_STATEMENT_TIMEOUT_MS: pickString('DB_STATEMENT_TIMEOUT_MS'),
     DB_SLOW_QUERY_MS: pickString('DB_SLOW_QUERY_MS'),
+    HTTP_SLOW_REQUEST_MS: pickString('HTTP_SLOW_REQUEST_MS'),
     REDIS_URL: pickString('REDIS_URL', isTest ? 'redis://127.0.0.1:6379' : undefined),
     MAX_TREE_DEPTH: pickString('MAX_TREE_DEPTH'),
     ENABLE_CLEANUP_WORKER: pickString('ENABLE_CLEANUP_WORKER'),
     CLEANUP_RETENTION_DAYS: pickString('CLEANUP_RETENTION_DAYS'),
     CLEANUP_BATCH_SIZE: pickString('CLEANUP_BATCH_SIZE'),
     CLEANUP_CRON: pickString('CLEANUP_CRON'),
+    ENABLE_CACHE: pickString('ENABLE_CACHE'),
+    CACHE_REDIS_DB: pickString('CACHE_REDIS_DB'),
+    CACHE_TTL_MS: pickString('CACHE_TTL_MS'),
   };
 
   const result = envSchema.safeParse(raw);

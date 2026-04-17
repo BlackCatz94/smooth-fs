@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto';
 import { apiEnvelopeSchema } from '@smoothfs/shared';
 import { Elysia } from 'elysia';
 import IORedis from 'ioredis';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { mapError } from './adapters/http/error-mapper';
+import { buildFolderRoutes } from './adapters/http/folders.routes';
+import { resolveRequestId } from './adapters/http/helpers';
 import { loadEnv } from './env';
 import {
   startCleanupWorker,
@@ -21,11 +22,6 @@ const healthData = z.object({
 });
 const healthEnvelope = apiEnvelopeSchema(healthData);
 
-function resolveRequestId(req: Request): string {
-  const headerId = req.headers.get('x-request-id')?.trim();
-  return headerId !== undefined && headerId.length > 0 ? headerId : randomUUID();
-}
-
 export type App = ReturnType<typeof buildApp>;
 
 export interface AppHandle {
@@ -38,17 +34,43 @@ export interface AppHandle {
 export function buildApp(container: Container) {
   const { env, logger } = container;
 
+  // Per-request start times. WeakMap keeps entries tied to the Request object
+  // lifetime (no manual cleanup); works across `.use()` subrouters where
+  // Elysia's `.derive()` propagation is implementation-defined.
+  const starts = new WeakMap<Request, number>();
+  const elapsedMs = (req: Request): number => {
+    const start = starts.get(req);
+    return start === undefined ? 0 : Math.round(performance.now() - start);
+  };
+
   return new Elysia()
+    .onRequest(({ request }) => {
+      starts.set(request, performance.now());
+    })
+    .onAfterHandle(({ request, set }) => {
+      const ms = elapsedMs(request);
+      set.headers['x-response-time-ms'] = String(ms);
+      if (ms >= env.HTTP_SLOW_REQUEST_MS) {
+        const requestId = resolveRequestId(request);
+        forRequest(logger, requestId).warn(
+          { path: new URL(request.url).pathname, ms },
+          'slow http request',
+        );
+      }
+    })
     .onError(({ error, request, set }) => {
       const requestId = resolveRequestId(request);
       const mapped = mapError(error, requestId);
+      const ms = elapsedMs(request);
       set.status = mapped.status;
       set.headers['x-request-id'] = requestId;
+      set.headers['x-response-time-ms'] = String(ms);
       forRequest(logger, requestId).error(
         {
           err: mapped.body.error,
           status: mapped.status,
           path: new URL(request.url).pathname,
+          ms,
         },
         'request failed',
       );
@@ -62,8 +84,10 @@ export function buildApp(container: Container) {
         await container.dbHandle.db.execute(sql`SELECT 1`);
       });
 
+      // Probe Redis only when something in this process actually depends on it
+      // (cleanup worker and/or the cache). Otherwise `/health` stays DB-only.
       let redisStatus: 'ok' | 'skipped' = 'skipped';
-      if (env.ENABLE_CLEANUP_WORKER) {
+      if (env.ENABLE_CLEANUP_WORKER || env.ENABLE_CACHE) {
         const probe = new IORedis(env.REDIS_URL, {
           maxRetriesPerRequest: 1,
           lazyConnect: true,
@@ -82,7 +106,8 @@ export function buildApp(container: Container) {
         data: { status: 'ok' as const, db: 'ok' as const, redis: redisStatus },
         meta: { requestId },
       });
-    });
+    })
+    .use(buildFolderRoutes(container));
 }
 
 export async function startApp(): Promise<AppHandle> {

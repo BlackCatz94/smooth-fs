@@ -1,6 +1,11 @@
 import { decodeCursor, encodeCursor } from '@smoothfs/shared';
-import { and, asc, eq, gt, isNull, or, sql } from 'drizzle-orm';
-import { DepthLimitExceededError, InvalidCursorError } from '../../domain/errors';
+import { and, asc, eq, gt, ilike, isNull, or, sql } from 'drizzle-orm';
+import {
+  DepthLimitExceededError,
+  FolderNotDeletedError,
+  FolderNotFoundError,
+  InvalidCursorError,
+} from '../../domain/errors';
 import type { FileItem, Folder } from '../../domain/folder';
 import type {
   FolderContents,
@@ -8,6 +13,9 @@ import type {
   GetFolderContentsInput,
   ListChildrenInput,
   Page,
+  RestoreFolderInput,
+  RestoreFolderResult,
+  SearchFoldersInput,
   SoftDeleteFolderInput,
 } from '../../ports/folder-repository';
 import { timed, type TimingConfig } from '../../infrastructure/timing';
@@ -24,6 +32,16 @@ interface CursorTuple {
 
 function toCursor(row: { name: string; id: string }): string {
   return encodeCursor([row.name, row.id]);
+}
+
+/**
+ * Escape `%` and `_` in a user-supplied query so they can't be interpreted as
+ * LIKE wildcards once we wrap the value in `%…%` for substring search.
+ * Backslash is used as an escape char; the default `ILIKE` grammar honours it
+ * unless a non-default `ESCAPE` clause overrides it, which we don't use.
+ */
+function escapeLikeWildcards(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 function parseCursor(raw: string | null): CursorTuple | null {
@@ -200,11 +218,122 @@ export class DrizzleFolderRepository implements FolderRepository {
     );
   }
 
-  restore(_folderId: string): Promise<void> {
-    // Intentional: restore is declared on the port but its implementation is
-    // deferred to Phase 3+. Failing loudly here prevents accidental consumption.
-    return Promise.reject(
-      new Error('FolderRepository.restore is not implemented in Phase 2'),
+  async searchFolders(input: SearchFoldersInput): Promise<Page<Folder>> {
+    return timed(
+      'repo.folders.search',
+      this.timing,
+      async () => {
+        const pattern = `%${escapeLikeWildcards(input.query)}%`;
+        const cursor = parseCursor(input.cursor);
+        const keyset =
+          cursor === null
+            ? undefined
+            : or(
+                gt(folders.name, cursor.name),
+                and(eq(folders.name, cursor.name), gt(folders.id, cursor.id)),
+              );
+        const where = keyset
+          ? and(isNull(folders.deletedAt), ilike(folders.name, pattern), keyset)
+          : and(isNull(folders.deletedAt), ilike(folders.name, pattern));
+
+        const rows = await this.handle.db
+          .select()
+          .from(folders)
+          .where(where)
+          .orderBy(asc(folders.name), asc(folders.id))
+          .limit(input.limit + 1);
+
+        const hasMore = rows.length > input.limit;
+        const page = hasMore ? rows.slice(0, input.limit) : rows;
+        const last = page[page.length - 1];
+        return {
+          items: page.map(mapFolder),
+          nextCursor:
+            hasMore && last ? toCursor({ name: last.name, id: last.id }) : null,
+        };
+      },
+      { limitPlusOne: input.limit + 1, hasCursor: input.cursor !== null },
+    );
+  }
+
+  async restore(input: RestoreFolderInput): Promise<RestoreFolderResult> {
+    const { folderId, restoredAt, maxDepth } = input;
+    // Same Date → ISO pattern as softDelete so the server parses the value
+    // once per batch instead of the driver re-binding per parameter.
+    const ts = restoredAt.toISOString();
+    return timed(
+      'repo.folders.restore',
+      this.timing,
+      async () => {
+        // Pre-check outside the transaction: lets us short-circuit the
+        // common error paths without paying BEGIN/ROLLBACK cost and avoids
+        // the "throw inside tx callback" shape that some drivers are touchy
+        // about under load. The tx below *re-asserts* via `deleted_at = prior`
+        // so a concurrent restore between the pre-check and the UPDATE just
+        // yields zero rows rather than a dirty write.
+        const preRows = await this.handle.db
+          .select({ id: folders.id, deletedAt: folders.deletedAt })
+          .from(folders)
+          .where(eq(folders.id, folderId))
+          .limit(1);
+        const preRow = preRows[0];
+        if (!preRow) {
+          throw new FolderNotFoundError(folderId);
+        }
+        if (preRow.deletedAt === null) {
+          throw new FolderNotDeletedError(folderId);
+        }
+        const priorDeletedAt = preRow.deletedAt;
+        const priorTs = priorDeletedAt.toISOString();
+
+        return this.handle.withTransaction(async (tx) => {
+          // Walk the subtree *through* soft-deleted rows (the target and its
+          // cascaded descendants are all tombstoned). The `deleted_at = prior`
+          // filter keeps earlier, unrelated soft-delete events untouched.
+          const filesRestored = await tx.execute<{ id: string }>(sql`
+            WITH RECURSIVE subtree AS (
+              SELECT id, 0 AS depth
+              FROM folders
+              WHERE id = ${folderId}
+              UNION ALL
+              SELECT f.id, s.depth + 1
+              FROM folders f
+              JOIN subtree s ON f.parent_id = s.id
+              WHERE s.depth < ${maxDepth}
+            )
+            UPDATE files
+            SET deleted_at = NULL, updated_at = ${ts}::timestamptz
+            WHERE folder_id IN (SELECT id FROM subtree)
+              AND deleted_at = ${priorTs}::timestamptz
+            RETURNING id
+          `);
+
+          const foldersRestored = await tx.execute<{ id: string }>(sql`
+            WITH RECURSIVE subtree AS (
+              SELECT id, 0 AS depth
+              FROM folders
+              WHERE id = ${folderId}
+              UNION ALL
+              SELECT f.id, s.depth + 1
+              FROM folders f
+              JOIN subtree s ON f.parent_id = s.id
+              WHERE s.depth < ${maxDepth}
+            )
+            UPDATE folders
+            SET deleted_at = NULL, updated_at = ${ts}::timestamptz
+            WHERE id IN (SELECT id FROM subtree)
+              AND deleted_at = ${priorTs}::timestamptz
+            RETURNING id
+          `);
+
+          return {
+            foldersRestored: foldersRestored.length,
+            filesRestored: filesRestored.length,
+            priorDeletedAt,
+          };
+        });
+      },
+      { folderId, maxDepth },
     );
   }
 

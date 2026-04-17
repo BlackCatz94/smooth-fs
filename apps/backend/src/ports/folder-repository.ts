@@ -36,6 +36,30 @@ export interface SoftDeleteFolderInput {
   readonly maxDepth: number;
 }
 
+export interface SearchFoldersInput {
+  /** Free-text substring query (already trimmed + validated by the service). */
+  readonly query: string;
+  /** Opaque keyset cursor (encoded last-seen `(name, id)` tuple). */
+  readonly cursor: string | null;
+  /** Caller-clamped upper bound (controller enforces hard cap). */
+  readonly limit: number;
+}
+
+export interface RestoreFolderInput {
+  readonly folderId: string;
+  /** Stamped once by the service so the entire subtree shares a single `updatedAt`. */
+  readonly restoredAt: Date;
+  /** Subtree traversal depth cap (from env.MAX_TREE_DEPTH). */
+  readonly maxDepth: number;
+}
+
+export interface RestoreFolderResult {
+  readonly foldersRestored: number;
+  readonly filesRestored: number;
+  /** The timestamp previously stamped by soft-delete. `null` if target wasn't deleted. */
+  readonly priorDeletedAt: Date | null;
+}
+
 /**
  * Port for folder tree access. All reads hide soft-deleted rows by default;
  * methods that operate on soft-deleted rows are named explicitly. Hard-delete
@@ -47,15 +71,28 @@ export interface FolderRepository {
   getById(folderId: string): Promise<Folder | null>;
   getPathToRoot(folderId: string, maxDepth: number): Promise<readonly Folder[]>;
   getFolderContents(input: GetFolderContentsInput): Promise<FolderContents>;
+
+  /**
+   * Keyset-paginated substring search on folder name. Trigram GIN index
+   * (`folders_name_trgm_idx`) makes `name ILIKE '%q%'` index-accelerated;
+   * ordering is `(name, id)` for deterministic keyset pagination.
+   */
+  searchFolders(input: SearchFoldersInput): Promise<Page<Folder>>;
+
   /**
    * Soft-deletes `folderId` and its entire subtree (folders + files), atomically.
    */
   softDelete(input: SoftDeleteFolderInput): Promise<void>;
 
   /**
-   * Restore semantics are declared on the port but **NOT** implemented in
-   * Phase 2. The adapter and service layers will implement this in Phase 3+.
-   * Calling it now must throw so accidental usage fails loudly.
+   * Transactional subtree restore. Undoes a single soft-delete event: all
+   * descendants that share the target folder's `deletedAt` timestamp are
+   * un-deleted in the same transaction. Rows that were deleted in a
+   * *different* event keep their tombstone so restore stays idempotent
+   * relative to a specific soft-delete occurrence.
+   *
+   * Throws `FolderNotDeletedError` if the target folder is not soft-deleted;
+   * throws `FolderNotFoundError` if it does not exist at all.
    */
-  restore(folderId: string): Promise<void>;
+  restore(input: RestoreFolderInput): Promise<RestoreFolderResult>;
 }
