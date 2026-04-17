@@ -17,6 +17,7 @@ Deliver REST endpoints and scalable data access patterns for tree browsing, chil
   - `GET /folders/:id/children`
   - `GET /folders/search`
   - `GET /folders/:id/contents` (folders + files for right panel)
+  - `POST /folders/:id/restore` (undo soft-delete; consumes the `restoreFolder` port declared in Phase 2)
 - Validate params/query using Elysia schema objects.
 - Apply cursor-based pagination for children and contents endpoints.
 - Add search endpoint with controlled limit and deterministic ordering.
@@ -24,8 +25,11 @@ Deliver REST endpoints and scalable data access patterns for tree browsing, chil
   - cursor / hasMore
   - requestId
   - optional debug timing fields in non-production
-- Add baseline caching for hot read paths (initial load, root-level list).
-- Add query performance checks (`EXPLAIN ANALYZE`) for large-tree scenarios.
+- Add trigram support deferred from Phase 2:
+  - `CREATE EXTENSION IF NOT EXISTS pg_trgm` migration
+  - GIN trigram index on `folders(name)` (and `files(name)` if in-scope for this phase's search)
+- Add baseline caching for hot read paths (initial load, root-level list), reusing the Phase 2 Redis instance with a distinct key prefix (e.g. `cache:*`) and ideally a separate logical DB from BullMQ (`bull:*`).
+- Add query performance checks (`EXPLAIN ANALYZE`) for large-tree scenarios and for trigram-backed search.
 - Add integration tests for each endpoint behavior + error mapping.
 
 ## Done criteria
@@ -43,7 +47,10 @@ Deliver REST endpoints and scalable data access patterns for tree browsing, chil
 - **Combined contents endpoint:** single endpoint for folders+files vs separate endpoints composed by frontend.
 
 User's Choice:
-- Definitely Redis
-- Substring search backed by a trigram index (or fuzzy? is it overkill? - use ask tool on next plan to confirm this)
-- Encoded last-seen tuple
+- Definitely Redis (shared with Phase 2 BullMQ; separated by key prefix / logical DB)
+- Substring search backed by a `pg_trgm` GIN index (fuzzy ranking rejected as overkill for a filesystem clone: predictable index build, sub-100ms on millions of rows, matches Explorer "contains" UX)
+- Encoded last-seen tuple (cursor type lives in `@smoothfs/shared`)
 - Single endpoint for folders + files
+
+Follow-up decision:
+- Restore lands in Phase 3: implement `restoreFolder` adapter + service and expose `POST /folders/:id/restore` (clears `deleted_at` on folder + descendants in a single transaction, mirroring the soft-delete boundary).

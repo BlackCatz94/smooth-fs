@@ -52,3 +52,6 @@ BE: @/domain, @/ports, @/adapters, @/services
 Cross: @smoothfs/shared
 
 - Definitely per-app schemas for SOLID principles
+
+Follow-up Decision:
+- Zod for validation

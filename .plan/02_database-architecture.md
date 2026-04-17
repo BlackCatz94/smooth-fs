@@ -53,3 +53,6 @@ User's Choice:
 - Endpoint specific CTE queries (encapsulated in the repository layer)
 - Soft delete + background cleanup
 - parent_id = NULL for root folders
+
+Follow-up decision:
+- Use BullMQ + Redis for cron job
