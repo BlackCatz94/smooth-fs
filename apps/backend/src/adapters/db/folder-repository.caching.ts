@@ -142,6 +142,14 @@ interface FolderWire {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly deletedAt: string | null;
+  /**
+   * Mirrors `Folder.hasChildFolders`. Cached alongside the row so the hot
+   * listChildren / getFolderContents / getPathToRoot reads don't have to
+   * re-run the `EXISTS` subquery on a cache hit. Invalidation sweeps the
+   * whole folder namespace on any write, so this flag can never be more
+   * stale than the cached row it rides with.
+   */
+  readonly hasChildFolders: boolean;
 }
 
 interface FileWire {
@@ -166,6 +174,7 @@ function toWireFolder(f: Folder): FolderWire {
     createdAt: f.createdAt.toISOString(),
     updatedAt: f.updatedAt.toISOString(),
     deletedAt: f.deletedAt ? f.deletedAt.toISOString() : null,
+    hasChildFolders: f.hasChildFolders,
   };
 }
 
@@ -188,6 +197,7 @@ function reviveFolder(f: FolderWire): Folder {
     createdAt: new Date(f.createdAt),
     updatedAt: new Date(f.updatedAt),
     deletedAt: f.deletedAt ? new Date(f.deletedAt) : null,
+    hasChildFolders: f.hasChildFolders,
   };
 }
 

@@ -2,16 +2,17 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTreeStore } from './tree.store';
+import { useToastStore } from '@/stores/toasts';
 import { flattenVisibleRows, type TreeRow } from './flattenVisibleRows';
 import FolderNode from './FolderNode.vue';
 import LoadMoreRow from './LoadMoreRow.vue';
 import { RecycleScroller } from 'vue-virtual-scroller';
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
-import { Info } from 'lucide-vue-next';
 
 const route = useRoute();
 const router = useRouter();
 const tree = useTreeStore();
+const toasts = useToastStore();
 
 /**
  * Roving focus: exactly ONE treeitem is tabbable at a time. This matches the
@@ -55,6 +56,20 @@ onMounted(async () => {
     // Rehydrate the persisted expanded chain so the tree shape matches last
     // session even without a selection.
     await tree.rehydrateExpanded(persisted.expanded);
+
+    // Auto-expand all root folders on first load when there's nothing to
+    // rehydrate. Without this the user lands on a tree showing only the
+    // collapsed root(s) and has to manually click each chevron — but the
+    // Explorer-style UX (and what the user expects) is "I just opened
+    // the app, show me what's at the top". We only do this when there
+    // is no persisted expanded set so a user who deliberately collapsed
+    // everything in their previous session keeps that state.
+    if (persisted.expanded.length === 0 && tree.rootIds.length > 0) {
+      // Pull this through `toggleExpand` so we get child fetching + the
+      // store's invariants (no double-add to `expanded`) for free.
+      await Promise.all(tree.rootIds.map((id) => tree.toggleExpand(id)));
+    }
+
     focusedId.value = tree.rootIds[0] ?? null;
   }
 });
@@ -85,6 +100,33 @@ const visibleRows = computed<TreeRow[]>(() =>
     tree.loadingMore,
   ),
 );
+
+/**
+ * Minimum width for the (scrollable) tree content area (lp4).
+ *
+ * Each depth level consumes `INDENT_REM` rem of padding-left (see
+ * `FolderNode`/`LoadMoreRow`). On top of that a row needs room for its
+ * chevron + folder icon + label. When the deepest visible row would
+ * otherwise run off the panel's right edge, we widen the inner container
+ * so the wrapper's `overflow-x-auto` can reveal the tail via horizontal
+ * scroll. Using the LARGEST visible depth (not a pessimistic global max)
+ * keeps scroll range honest as the user expands/collapses.
+ */
+const INDENT_REM = 0.75;
+const ROW_RESERVED_PX = 240;
+const maxVisibleDepth = computed(() => {
+  let max = 0;
+  for (const r of visibleRows.value) {
+    if (r.depth > max) max = r.depth;
+  }
+  return max;
+});
+const treeMinWidthPx = computed(() => {
+  // 1 rem = 16 px (Tailwind default). Keep it a CSS px string so inline
+  // style doesn't need a unit conversion at paint time.
+  const indentPx = maxVisibleDepth.value * INDENT_REM * 16;
+  return `${indentPx + ROW_RESERVED_PX}px`;
+});
 
 function activateLoadMore(parentId: string | null): void {
   if (parentId === null) {
@@ -172,6 +214,13 @@ async function handleDelete(row: Extract<TreeRow, { kind: 'folder' }>): Promise<
       : false;
   if (!ok) return;
 
+  // Capture restore context BEFORE softDelete prunes the node from the store.
+  // The parent id and the displayed name are read once and closed over by the
+  // toast's Undo handler — `tree.nodes[row.id]` is gone after the delete.
+  const parentId = tree.nodes[row.id]?.parentId ?? null;
+  const deletedId = row.id;
+  const deletedName = row.node.name;
+
   const wasSelected = tree.selectedId === row.id;
   try {
     await tree.softDelete(row.id);
@@ -186,6 +235,17 @@ async function handleDelete(row: Extract<TreeRow, { kind: 'folder' }>): Promise<
   } else {
     focusedId.value = null;
   }
+
+  toasts.show({
+    message: `Folder "${deletedName}" deleted.`,
+    variant: 'success',
+    action: {
+      label: 'Undo',
+      async onActivate() {
+        await tree.restoreFolder(deletedId, parentId);
+      },
+    },
+  });
 }
 
 function handleKeydown(e: KeyboardEvent): void {
@@ -276,33 +336,6 @@ function handleKeydown(e: KeyboardEvent): void {
     class="h-full w-full flex flex-col"
     @keydown="handleKeydown"
   >
-    <!--
-      On-demand loading hint. Kept as a compact header with a native
-      title tooltip so it:
-        - is always visible (no hover-only affordance on touch),
-        - carries the full explanation for keyboard/screen-reader users
-          (via `aria-describedby` on the tree).
-      We deliberately avoid a custom popover library here — this is static,
-      informational copy that doesn't need dismiss/focus management.
-    -->
-    <div
-      class="flex h-8 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-3 text-[11px] uppercase tracking-wide text-slate-500"
-    >
-      <Info
-        class="h-3.5 w-3.5 text-slate-400"
-        aria-hidden="true"
-      />
-      <span class="font-medium text-slate-600">Folders</span>
-      <span class="truncate">·</span>
-      <span
-        id="folder-tree-hint"
-        class="truncate normal-case tracking-normal text-[11px] text-slate-500"
-        title="SmoothFS loads folders on demand. Click the chevron (or press ArrowRight) to expand a node — only the first page of children is fetched per click. Folders with more siblings show a 'Load more' row; activate it with Enter to fetch the next page."
-      >
-        loads on demand — click ▸ to expand
-      </span>
-    </div>
-
     <div
       v-if="tree.loading.has('root')"
       class="p-4 text-sm text-slate-500"
@@ -327,39 +360,52 @@ function handleKeydown(e: KeyboardEvent): void {
         Dismiss
       </button>
     </div>
+    <!--
+      Horizontal-scroll wrapper (lp4): the virtual scroller is a vertical
+      scroll container, so we give it a `min-width` wider than the panel
+      when deep trees push their last-visible column off the panel's right
+      edge. `overflow-x-auto` on the wrapper then gives the user a native
+      horizontal scrollbar instead of silently clipping deep rows. The
+      wrapper's `overflow-y-hidden` is important: RecycleScroller owns the
+      Y scrollbar inside; we only take X here.
+    -->
     <div
       v-else
-      class="flex-1 overflow-hidden"
+      class="flex-1 overflow-x-auto overflow-y-hidden"
       role="tree"
       aria-label="Folders"
-      aria-describedby="folder-tree-hint"
     >
-      <RecycleScroller
-        ref="scrollerRef"
-        v-slot="{ item }"
-        class="h-full w-full"
-        :items="visibleRows"
-        :item-size="32"
-        key-field="id"
+      <div
+        class="h-full"
+        :style="{ minWidth: treeMinWidthPx }"
       >
-        <FolderNode
-          v-if="item.kind === 'folder'"
-          :row="item"
-          :is-selected="tree.selectedId === item.id"
-          :is-focused="focusedId === item.id"
-          @toggle="handleToggle"
-          @select="handleSelect"
-          @focus="focusedId = item.id"
-        />
-        <LoadMoreRow
-          v-else
-          :depth="item.depth"
-          :is-loading="item.isLoading"
-          :is-focused="focusedId === item.id"
-          @activate="activateLoadMore(item.parentId)"
-          @focus="focusedId = item.id"
-        />
-      </RecycleScroller>
+        <RecycleScroller
+          ref="scrollerRef"
+          v-slot="{ item }"
+          class="h-full w-full"
+          :items="visibleRows"
+          :item-size="32"
+          key-field="id"
+        >
+          <FolderNode
+            v-if="item.kind === 'folder'"
+            :row="item"
+            :is-selected="tree.selectedId === item.id"
+            :is-focused="focusedId === item.id"
+            @toggle="handleToggle"
+            @select="handleSelect"
+            @focus="focusedId = item.id"
+          />
+          <LoadMoreRow
+            v-else
+            :depth="item.depth"
+            :is-loading="item.isLoading"
+            :is-focused="focusedId === item.id"
+            @activate="activateLoadMore(item.parentId)"
+            @focus="focusedId = item.id"
+          />
+        </RecycleScroller>
+      </div>
     </div>
   </div>
 </template>

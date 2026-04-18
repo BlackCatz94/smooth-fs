@@ -12,6 +12,7 @@ function makeRow(overrides: Partial<VisibleRow> = {}): VisibleRow {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     deletedAt: null,
+    hasChildFolders: true,
   };
   return {
     kind: 'folder',

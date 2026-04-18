@@ -4,6 +4,7 @@ import { Elysia } from 'elysia';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { mapError } from './adapters/http/error-mapper';
+import { buildFileRoutes } from './adapters/http/files.routes';
 import { buildFolderRoutes } from './adapters/http/folders.routes';
 import { resolveRequestId } from './adapters/http/helpers';
 import { InvalidEnvError, loadEnv } from './env';
@@ -54,7 +55,10 @@ export function buildApp(container: Container) {
     .use(
       cors({
         origin: env.FRONTEND_ORIGIN,
-        methods: ['GET', 'POST', 'OPTIONS'],
+        // DELETE is required for soft-delete endpoints (folders + files).
+        // Without it the browser preflight blocks the request before our
+        // route handler ever runs.
+        methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
         exposeHeaders: ['x-request-id', 'x-response-time-ms'],
       }),
     )
@@ -116,7 +120,8 @@ export function buildApp(container: Container) {
         meta: { requestId },
       });
     })
-    .use(buildFolderRoutes(container));
+    .use(buildFolderRoutes(container))
+    .use(buildFileRoutes(container));
 }
 
 export async function startApp(): Promise<AppHandle> {

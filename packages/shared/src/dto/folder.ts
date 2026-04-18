@@ -6,6 +6,14 @@ const isoDateTime = z.string().datetime();
 /**
  * Folder node (adjacency list). `parentId` is null for the logical root.
  * `deletedAt` is set when soft-deleted (Phase 2+).
+ *
+ * `hasChildFolders` is computed by the adapter via an index-backed `EXISTS`
+ * subquery against `folders(parent_id) WHERE deleted_at IS NULL`. It lets the
+ * client render the tree chevron only for folders that actually have folder
+ * children, so users don't get the "click, chevron disappears, nothing
+ * happened" surprise on empty branches. Only folder children count — a folder
+ * with 0 sub-folders but 100 files is a tree leaf (its files open in the
+ * right panel when the folder is selected, mirroring Windows Explorer).
  */
 export const folderNodeSchema = z.object({
   id: z.string().uuid(),
@@ -14,6 +22,7 @@ export const folderNodeSchema = z.object({
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
   deletedAt: isoDateTime.nullable(),
+  hasChildFolders: z.boolean(),
 });
 
 export type FolderNode = z.infer<typeof folderNodeSchema>;

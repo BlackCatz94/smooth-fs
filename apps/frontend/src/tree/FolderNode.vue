@@ -15,7 +15,11 @@ const emit = defineEmits<{
   (e: 'focus'): void;
 }>();
 
-const paddingLeft = computed(() => `${props.row.depth * 1.5 + 0.5}rem`);
+// Per-depth indent halved (0.75rem, was 1.5rem) so deep trees stay usable
+// without immediately needing horizontal scroll. Kept in sync with
+// `FolderTree.vue`'s `INDENT_REM` constant — the tree uses it to size the
+// horizontal-scroll container.
+const paddingLeft = computed(() => `${props.row.depth * 0.75 + 0.5}rem`);
 
 /**
  * Roving focus: only the focused row gets `tabindex=0`; every other row is

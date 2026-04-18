@@ -25,6 +25,56 @@ import { files, folders } from './schema';
 type FolderRow = typeof folders.$inferSelect;
 type FileRow = typeof files.$inferSelect;
 
+/**
+ * A correlated `EXISTS` subquery: "does the outer `folders.id` row have at
+ * least one live folder child?". Backed by `folders_parent_name_id_live_idx`
+ * (partial index on `(parent_id, name, id) WHERE deleted_at IS NULL`), so
+ * Postgres resolves it with one index probe per outer row — cheap enough to
+ * include in every row's projection.
+ *
+ * Declared once and reused across every `.select(...)` below so the semantics
+ * (and query plan) stay identical for root listing, child listing, search,
+ * and single-row `getById`.
+ *
+ * Implementation note: we reference the outer table by its fully-qualified
+ * name (`"folders"."id"`) written literally, not via `${folders.id}`. Drizzle
+ * strips the table qualifier from column interpolations used inside a
+ * projection's `sql` expression, which turns `c.parent_id = ${folders.id}`
+ * into `c.parent_id = "id"`. That resolves to the *inner* alias's `id` —
+ * making the EXISTS compare a folder's parent_id to its own id, which is
+ * always false except for impossible self-parent cycles. The bug is silent:
+ * the query runs, but every row's `hasChildFolders` comes back `false`.
+ */
+const hasChildFoldersExpr = sql<boolean>`EXISTS (
+  SELECT 1
+  FROM "folders" AS c
+  WHERE c.parent_id = "folders"."id"
+    AND c.deleted_at IS NULL
+)`;
+
+/**
+ * Shape of the rows every read-path select returns. We always project the
+ * base columns plus the computed `hasChildFolders` flag so `mapFolder` has a
+ * single, exhaustive input shape — any path that forgets to include the flag
+ * fails at the type level instead of silently producing `undefined`.
+ */
+type FolderRowWithChildFlag = FolderRow & { hasChildFolders: boolean };
+
+/**
+ * Columns to select whenever we're returning a `Folder`. Centralised so every
+ * reader ships the same `hasChildFolders` projection; adding or renaming a
+ * column happens in one place.
+ */
+const folderSelectCols = {
+  id: folders.id,
+  parentId: folders.parentId,
+  name: folders.name,
+  createdAt: folders.createdAt,
+  updatedAt: folders.updatedAt,
+  deletedAt: folders.deletedAt,
+  hasChildFolders: hasChildFoldersExpr,
+} as const;
+
 interface CursorTuple {
   readonly name: string;
   readonly id: string;
@@ -61,7 +111,7 @@ function parseCursor(raw: string | null): CursorTuple | null {
   }
 }
 
-function mapFolder(row: FolderRow): Folder {
+function mapFolder(row: FolderRowWithChildFlag): Folder {
   return {
     id: row.id,
     parentId: row.parentId,
@@ -69,6 +119,7 @@ function mapFolder(row: FolderRow): Folder {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
+    hasChildFolders: row.hasChildFolders,
   };
 }
 
@@ -104,7 +155,7 @@ export class DrizzleFolderRepository implements FolderRepository {
   async getById(folderId: string): Promise<Folder | null> {
     return timed('repo.folders.getById', this.timing, async () => {
       const rows = await this.handle.db
-        .select()
+        .select(folderSelectCols)
         .from(folders)
         .where(and(eq(folders.id, folderId), isNull(folders.deletedAt)))
         .limit(1);
@@ -115,6 +166,13 @@ export class DrizzleFolderRepository implements FolderRepository {
   /**
    * Breadcrumb ancestry via recursive CTE (child → parent). `maxDepth` caps the
    * recursion to protect against runaway traversal or cycles. Root-first order.
+   *
+   * `hasChildFolders` is attached to each row via a correlated `EXISTS` in
+   * the final SELECT (not inside the CTE's recursive step) so the recursion
+   * stays linear — one index probe per row surfaced to the client, not one
+   * per step of the walk. The flag is present for every ancestor so the DTO
+   * contract stays uniform with list/search paths; the breadcrumb UI doesn't
+   * render chevrons itself, but future callers might.
    */
   async getPathToRoot(folderId: string, maxDepth: number): Promise<readonly Folder[]> {
     if (maxDepth < 1) {
@@ -124,7 +182,9 @@ export class DrizzleFolderRepository implements FolderRepository {
       'repo.folders.getPathToRoot',
       this.timing,
       async () => {
-        const rows = await this.handle.db.execute<FolderRow & { depth: number }>(sql`
+        const rows = await this.handle.db.execute<
+          FolderRow & { depth: number; hasChildFolders: boolean }
+        >(sql`
           WITH RECURSIVE path AS (
             SELECT f.*, 0 AS depth
             FROM folders f
@@ -136,7 +196,11 @@ export class DrizzleFolderRepository implements FolderRepository {
             WHERE p.deleted_at IS NULL AND path.depth < ${maxDepth}
           )
           SELECT id, parent_id AS "parentId", name, created_at AS "createdAt",
-                 updated_at AS "updatedAt", deleted_at AS "deletedAt", depth
+                 updated_at AS "updatedAt", deleted_at AS "deletedAt", depth,
+                 EXISTS (
+                   SELECT 1 FROM folders c
+                   WHERE c.parent_id = path.id AND c.deleted_at IS NULL
+                 ) AS "hasChildFolders"
           FROM path
           ORDER BY depth DESC
         `);
@@ -242,7 +306,7 @@ export class DrizzleFolderRepository implements FolderRepository {
           : and(isNull(folders.deletedAt), ilike(folders.name, pattern));
 
         const rows = await this.handle.db
-          .select()
+          .select(folderSelectCols)
           .from(folders)
           .where(where)
           .orderBy(asc(folders.name), asc(folders.id))
@@ -363,7 +427,7 @@ export class DrizzleFolderRepository implements FolderRepository {
       : and(parentCond, isNull(folders.deletedAt));
 
     const rows = await exec
-      .select()
+      .select(folderSelectCols)
       .from(folders)
       .where(where)
       .orderBy(asc(folders.name), asc(folders.id))

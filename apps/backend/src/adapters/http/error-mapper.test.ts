@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
 import {
   DepthLimitExceededError,
+  FolderNotDeletedError,
   FolderNotFoundError,
   InvalidCursorError,
   InvalidInputError,
@@ -34,6 +35,12 @@ describe('mapError', () => {
     const res = mapError(new InvalidInputError('oops', { field: 'name' }), REQ);
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('INVALID_INPUT');
+  });
+
+  it('maps FolderNotDeletedError to 409', () => {
+    const res = mapError(new FolderNotDeletedError('abc'), REQ);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('FOLDER_NOT_DELETED');
   });
 
   it('maps ZodError to 422 VALIDATION_ERROR with issues', () => {

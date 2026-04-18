@@ -12,6 +12,15 @@ export interface Folder {
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly deletedAt: Date | null;
+  /**
+   * Does this folder have at least one non-deleted folder child? Computed at
+   * read time by the adapter (EXISTS subquery). Always populated — no
+   * "unknown" state — so the DTO contract is uniform and the frontend can
+   * render the tree chevron correctly before the user clicks to expand.
+   *
+   * Only folder children count; files are irrelevant to tree navigation.
+   */
+  readonly hasChildFolders: boolean;
 }
 
 export interface FileItem {
@@ -31,6 +40,7 @@ export function toFolderNodeDto(f: Folder): FolderNode {
     createdAt: f.createdAt.toISOString(),
     updatedAt: f.updatedAt.toISOString(),
     deletedAt: f.deletedAt ? f.deletedAt.toISOString() : null,
+    hasChildFolders: f.hasChildFolders,
   };
 }
 

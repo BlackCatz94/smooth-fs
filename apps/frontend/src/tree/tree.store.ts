@@ -155,10 +155,33 @@ export const useTreeStore = defineStore('tree', () => {
     }
   }
 
+  /**
+   * Remove `id` and every one of its already-loaded descendants from the
+   * `expanded` set. Without this, collapsing a parent would "remember" that
+   * its grandchildren were expanded — so re-expanding the parent later would
+   * recursively unfold the whole subtree, surprising users who expected a
+   * collapse to mean "hide everything under here".
+   *
+   * We only walk the `children[]` graph we've already fetched: unknown
+   * subtrees are irrelevant because they can't be in `expanded` anyway.
+   * Iterative (stack) rather than recursive so a deep chain can't blow the
+   * JS stack.
+   */
+  function collapseSubtree(rootId: string, set: Set<string>): void {
+    const stack: string[] = [rootId];
+    while (stack.length > 0) {
+      const id = stack.pop() as string;
+      set.delete(id);
+      const kids = children.value[id];
+      if (!kids) continue;
+      for (const childId of kids) stack.push(childId);
+    }
+  }
+
   async function toggleExpand(id: string): Promise<void> {
     if (expanded.value.has(id)) {
       const next = new Set(expanded.value);
-      next.delete(id);
+      collapseSubtree(id, next);
       expanded.value = next;
     } else {
       const next = new Set(expanded.value);
@@ -215,6 +238,38 @@ export const useTreeStore = defineStore('tree', () => {
 
   function clearError(): void {
     error.value = null;
+  }
+
+  /**
+   * Undo a folder soft-delete. We can't reconstruct subtree state from local
+   * memory (softDelete pruned the descendants), so we re-fetch the parent's
+   * first child page — the restored folder reappears in alphabetical order
+   * and the user can re-expand its descendants on demand.
+   *
+   * `parentId` is supplied by the caller (the toast handler captured it
+   * before delete). Passing it explicitly is cheaper and more correct than
+   * trying to re-derive it from a server round-trip.
+   */
+  async function restoreFolder(id: string, parentId: string | null): Promise<void> {
+    try {
+      loading.value.add(id);
+      error.value = null;
+      await foldersApi.restore(id);
+      // Re-fetch the parent's children so the restored folder shows up in
+      // its sorted position. We force-reload (override the "already loaded"
+      // short-circuit in `loadChildren`) since the cached list omits the
+      // restored row.
+      if (parentId === null) {
+        await loadRoot();
+      } else {
+        await loadChildren(parentId, true);
+      }
+    } catch (err) {
+      error.value = normalizeUiError(err, 'restoreFolder');
+      throw err;
+    } finally {
+      loading.value.delete(id);
+    }
   }
 
   async function softDelete(id: string): Promise<void> {
@@ -286,5 +341,6 @@ export const useTreeStore = defineStore('tree', () => {
     rehydrateExpanded,
     clearError,
     softDelete,
+    restoreFolder,
   };
 });

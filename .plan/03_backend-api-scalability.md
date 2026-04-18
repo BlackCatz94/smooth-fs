@@ -17,7 +17,10 @@ Deliver REST endpoints and scalable data access patterns for tree browsing, chil
   - `GET /folders/:id/children`
   - `GET /folders/search`
   - `GET /folders/:id/contents` (folders + files for right panel)
+  - `DELETE /folders/:id` (soft-delete folder + subtree)
   - `POST /folders/:id/restore` (undo soft-delete; consumes the `restoreFolder` port declared in Phase 2)
+  - `DELETE /files/:id` (soft-delete a single file row; segregated `FileRepository` port)
+  - `POST /files/:id/restore` (undo a single-file soft-delete; pairs with the frontend "Undo" toast)
 - Validate params/query using Elysia schema objects.
 - Apply cursor-based pagination for children and contents endpoints.
 - Add search endpoint with controlled limit and deterministic ordering.
@@ -54,3 +57,5 @@ User's Choice:
 
 Follow-up decision:
 - Restore lands in Phase 3: implement `restoreFolder` adapter + service and expose `POST /folders/:id/restore` (clears `deleted_at` on folder + descendants in a single transaction, mirroring the soft-delete boundary).
+- Per-file soft-delete (`DELETE /files/:id`) lives behind its own `FileRepository` port (Interface Segregation): folder-tree use-cases never need single-file CRUD, and the file repo never needs subtree traversal. Cache invalidation reuses the `cache:folders:*` namespace because a single file mutation invalidates that folder's cached `getFolderContents` payload.
+- Per-file restore (`POST /files/:id/restore`) ships alongside the delete so the frontend's "Undo" toast can target the exact row the user just deleted, not just events that also touched a parent folder. The port grows a `restore(input)` method and a `getAnyById` reader (restore needs to *find* tombstones that `getById` filters out); the adapter does the same pre-check + `deleted_at = prior` UPDATE pattern as folder restore so concurrent restores can't dirty-write. A new `FileNotDeletedError` (409) mirrors `FolderNotDeletedError`.

@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Search, ChevronLeft, ChevronRight, ArrowUp } from 'lucide-vue-next';
 import FolderTree from '@/tree/FolderTree.vue';
 import ContentPanel from '@/components/ContentPanel.vue';
 import Breadcrumb from '@/components/Breadcrumb.vue';
 import SearchPopover from '@/components/SearchPopover.vue';
+import AppLogo from '@/components/AppLogo.vue';
+import ToastHost from '@/components/ToastHost.vue';
 import { useFolderPath } from '@/composables/useFolderPath';
+import { useResizablePanel } from '@/composables/useResizablePanel';
 import { useStatusStore } from '@/stores/status';
 
 const route = useRoute();
@@ -54,6 +57,63 @@ const itemsLabel = computed(() => {
 });
 
 const selectionLabel = computed(() => status.selectedName ?? 'None');
+
+/**
+ * Left-panel width (lp5). We use a px value rather than a Tailwind class so
+ * the splitter can deliver sub-breakpoint granularity. Min/max are tuned so
+ * the tree never collapses to unreadable and never starves the content
+ * panel: below 160 px the chevron + icon barely fit; above ~40% of the
+ * viewport the right panel starts to feel cramped.
+ *
+ * On very narrow viewports we also clamp down against the live viewport so
+ * a previously-wider persisted value doesn't lock us into a broken layout.
+ */
+const MIN_PANEL = 160;
+const MAX_PANEL = 640;
+const DEFAULT_PANEL = 288; // matches the previous Tailwind `w-72`
+const { width: leftPanelWidth, isDragging, clamp, setWidth, onPointerDown } =
+  useResizablePanel({
+    storageKey: 'smoothfs:leftPanelWidth',
+    defaultWidth: DEFAULT_PANEL,
+    min: MIN_PANEL,
+    max: MAX_PANEL,
+  });
+const leftPanelStyle = computed(() => ({ width: `${leftPanelWidth.value}px` }));
+
+function clampToViewport(): void {
+  if (typeof window === 'undefined') return;
+  // Never let the left panel eat more than ~55 % of the viewport so the
+  // content panel stays usable. This runs on every viewport resize.
+  const viewportCap = Math.floor(window.innerWidth * 0.55);
+  const hardMax = Math.min(MAX_PANEL, Math.max(MIN_PANEL, viewportCap));
+  if (leftPanelWidth.value > hardMax) setWidth(hardMax);
+}
+
+function onResizeHandleKey(e: KeyboardEvent): void {
+  // Keyboard accessibility for the splitter: ArrowLeft/Right nudge 16 px,
+  // Home/End snap to min/max. Matches WAI-ARIA separator keyboard model.
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    setWidth(clamp(leftPanelWidth.value - 16));
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    setWidth(clamp(leftPanelWidth.value + 16));
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    setWidth(MIN_PANEL);
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    setWidth(MAX_PANEL);
+  }
+}
+
+onMounted(() => {
+  clampToViewport();
+  window.addEventListener('resize', clampToViewport);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', clampToViewport);
+});
 </script>
 
 <template>
@@ -61,20 +121,11 @@ const selectionLabel = computed(() => status.selectedName ?? 'None');
     <!-- Top Navigation Bar -->
     <header class="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 shadow-sm z-10">
       <div class="flex min-w-0 flex-1 items-center gap-4">
-        <div class="flex shrink-0 items-center gap-2 font-semibold text-sky-600">
-          <svg
-            class="h-6 w-6"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M2 10v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V10" />
-            <path d="M2 10l3-7a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 21 3l3 7" />
-            <path d="M12 10v12" />
-          </svg>
+        <div class="flex shrink-0 items-center gap-2 font-semibold text-slate-900">
+          <AppLogo
+            :size="26"
+            title="SmoothFS"
+          />
           SmoothFS
         </div>
         <div class="h-6 w-px shrink-0 bg-slate-200" />
@@ -136,14 +187,56 @@ const selectionLabel = computed(() => status.selectedName ?? 'None');
     </header>
 
     <!-- Main Content Area -->
-    <div class="flex flex-1 overflow-hidden">
-      <!-- Left Panel: Directory Tree -->
-      <aside class="w-72 shrink-0 border-r border-slate-200 bg-white overflow-hidden">
+    <div
+      class="flex flex-1 overflow-hidden"
+      :class="{ 'select-none cursor-col-resize': isDragging }"
+    >
+      <!--
+        Left Panel: Directory Tree (lp5).
+        Width is driven by `useResizablePanel`; Tailwind can't express a
+        dynamic px value so we bind `style` directly. `shrink-0` is still
+        essential so the flex layout respects our exact width instead of
+        squeezing the panel when the content widens.
+      -->
+      <aside
+        class="shrink-0 border-r border-slate-200 bg-white overflow-hidden"
+        :style="leftPanelStyle"
+      >
         <FolderTree />
       </aside>
 
+      <!--
+        Splitter. `role="separator"` + `aria-orientation="vertical"` is the
+        WAI-ARIA pattern for a resize handle between horizontally-laid-out
+        panels (the handle itself is vertical). We expose min/max/current
+        via `aria-value*` so screen readers can announce drag progress.
+      -->
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize folder panel"
+        :aria-valuemin="MIN_PANEL"
+        :aria-valuemax="MAX_PANEL"
+        :aria-valuenow="leftPanelWidth"
+        tabindex="0"
+        class="relative w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-sky-400 focus:outline-none focus:bg-sky-500 transition-colors"
+        :class="{ 'bg-sky-500': isDragging }"
+        @pointerdown="onPointerDown"
+        @keydown="onResizeHandleKey"
+      >
+        <!--
+          Invisible wider hit target so users don't need pixel-precise aim.
+          The visible bar stays 4 px; this overlay adds 3 px of grip on
+          each side.
+        -->
+        <span
+          class="absolute inset-y-0 -left-1 -right-1"
+          aria-hidden="true"
+        />
+      </div>
+
       <!-- Right Panel: Content View -->
-      <main class="flex-1 overflow-hidden bg-white">
+      <main class="flex-1 min-w-0 overflow-hidden bg-white">
         <ContentPanel />
       </main>
     </div>
@@ -153,5 +246,13 @@ const selectionLabel = computed(() => status.selectedName ?? 'None');
       <div>{{ itemsLabel }}</div>
       <div class="truncate">Selected: {{ selectionLabel }}</div>
     </footer>
+
+    <!--
+      Toast layer is mounted last so it visually overlaps everything (z-50)
+      and lives outside the flex column so it never steals layout space —
+      eliminates the CLS bug where transient notifications would push the
+      status bar down.
+    -->
+    <ToastHost />
   </div>
 </template>

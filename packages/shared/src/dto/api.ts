@@ -60,6 +60,14 @@ export const folderIdParamSchema = z.object({
 });
 export type FolderIdParam = z.infer<typeof folderIdParamSchema>;
 
+/** UUID path param used by `/files/:id` endpoints. Mirrors folder shape so
+ * controllers stay symmetric, but the type is intentionally distinct so a
+ * folder-id can't be accidentally passed where a file-id is expected. */
+export const fileIdParamSchema = z.object({
+  id: z.string().uuid(),
+});
+export type FileIdParam = z.infer<typeof fileIdParamSchema>;
+
 /* -------------------------- response data shapes -------------------------- */
 
 export const folderListDataSchema = z.object({
@@ -98,6 +106,18 @@ export const folderRestoreDataSchema = z.object({
   priorDeletedAt: z.string().datetime().nullable(),
 });
 export type FolderRestoreData = z.infer<typeof folderRestoreDataSchema>;
+
+/**
+ * Single-file restore envelope. Symmetric with `folderRestoreDataSchema` so
+ * the frontend's "Undo delete" toast can treat both responses uniformly.
+ * `priorDeletedAt` is the timestamp the row carried *before* restore — useful
+ * for telemetry / debugging stale-undo scenarios.
+ */
+export const fileRestoreDataSchema = z.object({
+  id: z.string().uuid(),
+  priorDeletedAt: z.string().datetime().nullable(),
+});
+export type FileRestoreData = z.infer<typeof fileRestoreDataSchema>;
 
 export const folderPathDataSchema = z.object({
   items: z.array(folderNodeSchema),

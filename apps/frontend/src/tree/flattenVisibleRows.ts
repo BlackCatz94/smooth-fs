@@ -21,15 +21,25 @@ export interface VisibleRow {
   isExpanded: boolean;
   isLoading: boolean;
   /**
-   * Tri-state after Phase 5:
-   *   - `true`  — children fetched and non-empty, OR unknown (not yet fetched).
-   *   - `false` — children fetched and empty (confirmed leaf).
+   * Tri-state:
+   *   - `true`  — children may exist (either fetched and non-empty, or unknown
+   *               but the server's `hasChildFolders` flag says there's at
+   *               least one live folder child).
+   *   - `false` — confirmed leaf: either children have been fetched and the
+   *               list is empty, or the server already told us there are no
+   *               folder children (`node.hasChildFolders === false`).
    *
    * Leaves drop `aria-expanded` from their treeitem and hide the chevron so
-   * assistive tech and sighted users both see a confirmed-leaf folder.
+   * assistive tech and sighted users both see a confirmed leaf.
    */
   hasChildren: boolean;
-  /** True only when we have positive proof the folder has zero children. */
+  /**
+   * `true` when we can prove the folder has zero folder children, either
+   * from the server's upfront `hasChildFolders` flag or from an observed
+   * empty children page. The server flag lets us suppress the chevron on
+   * first paint, avoiding the "click the arrow, nothing happens, arrow
+   * vanishes" flash users saw before Phase 5+.
+   */
   isLeaf: boolean;
 }
 
@@ -88,7 +98,15 @@ export function flattenVisibleRows(
     const isExpanded = expanded.has(id);
     const isLoading = loading.has(id);
     const childIds = children[id];
-    const isLeaf = childIds !== undefined && childIds.length === 0;
+    // Confirmed leaf either from an observed empty children page (classic
+    // path, survives the backend flag being wrong) or from the server's
+    // upfront `hasChildFolders` flag (preempts the chevron click for
+    // branches we haven't fetched yet). `hasChildFolders === false` is a
+    // strong signal: the backend computes it via an index-backed EXISTS
+    // over live rows, invalidated on every folder write.
+    const observedLeaf = childIds !== undefined && childIds.length === 0;
+    const knownLeaf = node.hasChildFolders === false;
+    const isLeaf = observedLeaf || knownLeaf;
 
     rows.push({
       kind: 'folder',

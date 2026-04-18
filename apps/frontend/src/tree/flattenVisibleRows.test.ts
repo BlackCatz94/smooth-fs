@@ -3,13 +3,14 @@ import { flattenVisibleRows } from './flattenVisibleRows';
 import type { FolderNode } from '@smoothfs/shared';
 
 describe('flattenVisibleRows', () => {
-  const mockNode = (id: string): FolderNode => ({
+  const mockNode = (id: string, hasChildFolders = true): FolderNode => ({
     id,
     name: `Folder ${id}`,
     parentId: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     deletedAt: null,
+    hasChildFolders,
   });
 
   it('flattens root nodes correctly', () => {
@@ -110,6 +111,27 @@ describe('flattenVisibleRows', () => {
     if (row?.kind === 'folder') {
       expect(row.isLeaf).toBe(false);
       expect(row.hasChildren).toBe(true);
+    }
+  });
+
+  it('marks a folder as leaf when the server reports hasChildFolders=false even before children are fetched', () => {
+    // Regression: users reported clicking the chevron on an empty folder only
+    // to see it disappear (the fetch resolved to an empty list). The server
+    // now tells us upfront whether a folder has folder children; respect that
+    // so the chevron is never shown for a confirmed leaf.
+    const nodes = { '1': mockNode('1', /* hasChildFolders */ false) };
+    const rows = flattenVisibleRows(
+      ['1'],
+      nodes,
+      {}, // children not yet fetched
+      new Set<string>(),
+      new Set<string>(),
+    );
+    const row = rows[0];
+    expect(row?.kind).toBe('folder');
+    if (row?.kind === 'folder') {
+      expect(row.isLeaf).toBe(true);
+      expect(row.hasChildren).toBe(false);
     }
   });
 

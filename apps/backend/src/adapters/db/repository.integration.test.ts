@@ -134,6 +134,68 @@ describe('DrizzleFolderRepository', () => {
     ).rejects.toMatchObject({ code: 'INVALID_CURSOR' });
   });
 
+  it('hasChildFolders is true for parents and false for leaves across every read path', async () => {
+    if (!harness) return;
+    const repo = new DrizzleFolderRepository(harness.handle, timing);
+    // `wide-*` are leaves (no descendants); `deep-0001` has a descendant chain
+    // `deep-0002` under it. `root` has both the chain and the fan-out.
+    const { rootId } = await seedFixture(harness.handle, {
+      depth: 2,
+      width: 2,
+      filesPerFolder: 3,
+    });
+
+    // listChildren: root's children mix a parent (deep-0001) with leaves (wide-*).
+    const children = await repo.listChildren({
+      parentId: rootId,
+      cursor: null,
+      limit: 10,
+    });
+    const byName = Object.fromEntries(children.items.map((c) => [c.name, c]));
+    expect(byName['deep-0001']?.hasChildFolders).toBe(true);
+    expect(byName['wide-0000']?.hasChildFolders).toBe(false);
+    expect(byName['wide-0001']?.hasChildFolders).toBe(false);
+    // Leaf folders with *files* but no sub-folders are still leaves in the tree.
+    // (Asserts the "only folder children count" rule.)
+    expect(byName['wide-0000']?.hasChildFolders).toBe(false);
+
+    // listRoot: the seeded root is a parent.
+    const roots = await repo.listChildren({
+      parentId: null,
+      cursor: null,
+      limit: 10,
+    });
+    expect(roots.items[0]?.name).toBe('root');
+    expect(roots.items[0]?.hasChildFolders).toBe(true);
+
+    // getById: single-row read carries the same flag.
+    const rootById = await repo.getById(rootId);
+    expect(rootById?.hasChildFolders).toBe(true);
+
+    // Search: results carry the flag too (UI may promote a search hit into
+    // a tree row, so they must agree with listChildren).
+    const searched = await repo.searchFolders({ query: 'wide', cursor: null, limit: 10 });
+    expect(searched.items).not.toHaveLength(0);
+    for (const row of searched.items) {
+      expect(row.hasChildFolders).toBe(false);
+    }
+
+    // getPathToRoot: every ancestor row carries the flag (every ancestor has
+    // at least one child — itself is on the path).
+    const deepestRow = await harness.handle.db
+      .select()
+      .from(folders)
+      .where(eq(folders.name, 'deep-0002'))
+      .limit(1);
+    const deepestId = deepestRow[0]?.id;
+    if (!deepestId) throw new Error('seed did not produce deep-0002');
+    const path = await repo.getPathToRoot(deepestId, 64);
+    expect(path.map((p) => p.name)).toEqual(['root', 'deep-0001', 'deep-0002']);
+    expect(path[0]?.hasChildFolders).toBe(true); // root
+    expect(path[1]?.hasChildFolders).toBe(true); // deep-0001 (parent of deep-0002)
+    expect(path[2]?.hasChildFolders).toBe(false); // deep-0002 (seed leaf)
+  });
+
   it('getPathToRoot walks ancestry in root-first order and respects depth cap', async () => {
     if (!harness) return;
     const repo = new DrizzleFolderRepository(harness.handle, timing);

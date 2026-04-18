@@ -35,6 +35,19 @@ export interface UseContentsReturn {
    * right panel drops the row without a round-trip.
    */
   removeFolder(id: string): void;
+  /**
+   * Counterpart to `removeFolder` for individual file deletes (DELETE
+   * `/api/v1/files/:id`).
+   */
+  removeFile(id: string): void;
+  /**
+   * Re-fetch the current folder's contents, replacing any in-memory state.
+   * Used after Undo (restore) so the restored row reappears in alphabetical
+   * order. Inserting locally would require duplicating the server's sort and
+   * cursor reconciliation; a single round-trip is correct, simple, and tiny
+   * compared to the user-perceived cost of the destructive action it follows.
+   */
+  refresh(): Promise<void>;
 }
 
 export function useContents(selectedFolderId: () => string | undefined): UseContentsReturn {
@@ -63,59 +76,67 @@ export function useContents(selectedFolderId: () => string | undefined): UseCont
     activeController = null;
   }
 
-  watch(
-    selectedFolderId,
-    async (id) => {
-      abortActive();
+  /**
+   * Run a fresh "first-page" fetch for `id` (or clear state when id is
+   * undefined). Centralised so both the `selectedFolderId` watcher and the
+   * public `refresh()` go through the same abort + token discipline — the
+   * stale-response guard only works if every fetch path uses it.
+   */
+  async function fetchInitial(id: string | undefined): Promise<void> {
+    abortActive();
 
-      activeFolderId = id;
-      const myToken = ++activeToken;
+    activeFolderId = id;
+    const myToken = ++activeToken;
 
-      if (!id) {
-        folders.value = [];
-        files.value = [];
-        foldersCursor.value = null;
-        filesCursor.value = null;
-        hasMoreFolders.value = false;
-        hasMoreFiles.value = false;
-        error.value = null;
-        loading.value = false;
-        return;
-      }
-
-      const controller = new AbortController();
-      activeController = controller;
-      loading.value = true;
+    if (!id) {
+      folders.value = [];
+      files.value = [];
+      foldersCursor.value = null;
+      filesCursor.value = null;
+      hasMoreFolders.value = false;
+      hasMoreFiles.value = false;
       error.value = null;
-      try {
-        const res = await foldersApi.getContents(
-          id,
-          { limit: LIST_MAX_LIMIT },
-          { signal: controller.signal },
-        );
-        if (myToken !== activeToken) return;
-        folders.value = [...res.data.folders.items];
-        files.value = [...res.data.files.items];
-        foldersCursor.value = res.data.folders.nextCursor;
-        filesCursor.value = res.data.files.nextCursor;
-        hasMoreFolders.value = res.data.folders.hasMore;
-        hasMoreFiles.value = res.data.files.hasMore;
-      } catch (err) {
-        if (myToken !== activeToken) return;
-        if (isAbort(err)) return;
-        error.value = normalizeUiError(err, 'getContents');
-        folders.value = [];
-        files.value = [];
-        foldersCursor.value = null;
-        filesCursor.value = null;
-        hasMoreFolders.value = false;
-        hasMoreFiles.value = false;
-      } finally {
-        if (myToken === activeToken) loading.value = false;
-      }
-    },
-    { immediate: true },
-  );
+      loading.value = false;
+      return;
+    }
+
+    const controller = new AbortController();
+    activeController = controller;
+    loading.value = true;
+    error.value = null;
+    try {
+      const res = await foldersApi.getContents(
+        id,
+        { limit: LIST_MAX_LIMIT },
+        { signal: controller.signal },
+      );
+      if (myToken !== activeToken) return;
+      folders.value = [...res.data.folders.items];
+      files.value = [...res.data.files.items];
+      foldersCursor.value = res.data.folders.nextCursor;
+      filesCursor.value = res.data.files.nextCursor;
+      hasMoreFolders.value = res.data.folders.hasMore;
+      hasMoreFiles.value = res.data.files.hasMore;
+    } catch (err) {
+      if (myToken !== activeToken) return;
+      if (isAbort(err)) return;
+      error.value = normalizeUiError(err, 'getContents');
+      folders.value = [];
+      files.value = [];
+      foldersCursor.value = null;
+      filesCursor.value = null;
+      hasMoreFolders.value = false;
+      hasMoreFiles.value = false;
+    } finally {
+      if (myToken === activeToken) loading.value = false;
+    }
+  }
+
+  watch(selectedFolderId, fetchInitial, { immediate: true });
+
+  async function refresh(): Promise<void> {
+    await fetchInitial(selectedFolderId());
+  }
 
   async function loadMoreFolders(): Promise<void> {
     const id = activeFolderId;
@@ -178,6 +199,13 @@ export function useContents(selectedFolderId: () => string | undefined): UseCont
     }
   }
 
+  function removeFile(id: string): void {
+    const next = files.value.filter((f) => f.id !== id);
+    if (next.length !== files.value.length) {
+      files.value = next;
+    }
+  }
+
   return {
     folders,
     files,
@@ -191,6 +219,8 @@ export function useContents(selectedFolderId: () => string | undefined): UseCont
     loadMoreFolders,
     loadMoreFiles,
     removeFolder,
+    removeFile,
+    refresh,
   };
 }
 

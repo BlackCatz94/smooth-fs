@@ -19,7 +19,7 @@ Built to optimize for three non-negotiables, in order: **Smooth** (no dropped fr
 ## Prerequisites
 
 - **Bun** 1.3 or newer — `curl -fsSL https://bun.sh/install | bash`
-- **Docker Desktop** (or any Docker engine) for PostgreSQL + Redis
+- **Docker** for PostgreSQL + Redis
 - A POSIX-ish shell. On Windows, PowerShell 7+ or Git Bash both work.
 
 ## Quick start

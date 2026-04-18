@@ -13,7 +13,8 @@ const emit = defineEmits<{
   (e: 'focus'): void;
 }>();
 
-const paddingLeft = computed(() => `${props.depth * 1.5 + 0.5}rem`);
+// Matches `FolderNode`'s indent step (see `FolderTree.INDENT_REM`).
+const paddingLeft = computed(() => `${props.depth * 0.75 + 0.5}rem`);
 const tabIndex = computed(() => (props.isFocused ? 0 : -1));
 
 function onClick(e: MouseEvent): void {
