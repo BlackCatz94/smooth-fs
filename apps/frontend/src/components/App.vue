@@ -1,7 +1,7 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { RouterView } from 'vue-router';
+</script>
 
 <template>
-  <main class="flex min-h-screen items-center justify-center p-8">
-    <p class="text-lg font-medium tracking-tight text-zinc-100">SmoothFS</p>
-  </main>
+  <RouterView />
 </template>

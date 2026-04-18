@@ -98,3 +98,8 @@ export const folderRestoreDataSchema = z.object({
   priorDeletedAt: z.string().datetime().nullable(),
 });
 export type FolderRestoreData = z.infer<typeof folderRestoreDataSchema>;
+
+export const folderPathDataSchema = z.object({
+  items: z.array(folderNodeSchema),
+});
+export type FolderPathData = z.infer<typeof folderPathDataSchema>;

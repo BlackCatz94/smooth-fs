@@ -140,7 +140,12 @@ export class DrizzleFolderRepository implements FolderRepository {
           FROM path
           ORDER BY depth DESC
         `);
-        return rows.map(mapFolder);
+        return rows.map((r) => ({
+          ...mapFolder(r),
+          createdAt: new Date(r.createdAt),
+          updatedAt: new Date(r.updatedAt),
+          deletedAt: r.deletedAt ? new Date(r.deletedAt) : null,
+        }));
       },
       { folderId, maxDepth },
     );

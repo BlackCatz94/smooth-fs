@@ -28,6 +28,7 @@ export {
   folderContentsDataSchema,
   folderSearchDataSchema,
   folderRestoreDataSchema,
+  folderPathDataSchema,
   type PaginationQuery,
   type ContentsQuery,
   type SearchQuery,
@@ -36,4 +37,5 @@ export {
   type FolderContentsData,
   type FolderSearchData,
   type FolderRestoreData,
+  type FolderPathData,
 } from './dto/api';

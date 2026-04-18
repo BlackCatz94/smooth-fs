@@ -9,9 +9,20 @@ const clientEnvSchema = z.object({
 
 export type FrontendEnv = z.infer<typeof clientEnvSchema>;
 
+let cachedEnv: FrontendEnv | null = null;
+
 /** Validates `import.meta.env` once at bootstrap; throws with Zod issues if misconfigured. */
 export function loadEnv(): FrontendEnv {
-  return clientEnvSchema.parse({
+  if (cachedEnv) return cachedEnv;
+  cachedEnv = clientEnvSchema.parse({
     VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
   });
+  return cachedEnv;
+}
+
+export function getEnv(): FrontendEnv {
+  if (!cachedEnv) {
+    return loadEnv();
+  }
+  return cachedEnv;
 }

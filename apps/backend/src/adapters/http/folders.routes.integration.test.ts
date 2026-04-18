@@ -14,6 +14,7 @@ import {
   folderListDataSchema,
   folderRestoreDataSchema,
   folderSearchDataSchema,
+  folderPathDataSchema,
 } from '@smoothfs/shared';
 import { buildApp } from '../../index';
 import { buildContainer, type Container } from '../../infrastructure/container';
@@ -385,6 +386,58 @@ describe('POST /api/v1/folders/:id/restore', () => {
       .from(files)
       .where(sql`${files.folderId} = ${wideId} AND ${files.deletedAt} IS NULL`);
     expect(remaining.map((r) => r.name)).toEqual(['live.txt']);
+  });
+});
+
+describe('GET /api/v1/folders/:id/path', () => {
+  it('returns path to root', async () => {
+    if (!harness) return;
+    const { rootId } = await seedFixture(harness.handle, {
+      depth: 2,
+      width: 1,
+      filesPerFolder: 0,
+    });
+    
+    // Get leaf node
+    const leaf = await harness.handle.db
+      .select()
+      .from(folders)
+      .where(sql`${folders.name} = 'deep-0002'`);
+    const leafId = leaf[0]!.id;
+
+    const res = await hit(`/api/v1/folders/${leafId}/path`);
+    expect(res.status).toBe(200);
+    const json = await readJson(res);
+    const parsed = folderPathDataSchema.parse(json.data);
+    
+    // Path should be root -> depth 1 -> leaf
+    expect(parsed.items).toHaveLength(3);
+    expect(parsed.items[0]?.id).toBe(rootId);
+    expect(parsed.items[2]?.id).toBe(leafId);
+  });
+
+  it('404s on unknown folder id', async () => {
+    if (!harness) return;
+    const res = await hit('/api/v1/folders/00000000-0000-0000-0000-000000000000/path');
+    expect(res.status).toBe(404);
+    const body = apiErrorBodySchema.parse(await res.json());
+    expect(body.error.code).toBe('FOLDER_NOT_FOUND');
+  });
+});
+
+describe('CORS', () => {
+  it('handles preflight OPTIONS request', async () => {
+    if (!harness) return;
+    const res = await hit('/api/v1/folders', {
+      method: 'OPTIONS',
+      headers: {
+        'Origin': harness.env.FRONTEND_ORIGIN,
+        'Access-Control-Request-Method': 'GET',
+      },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe(harness.env.FRONTEND_ORIGIN);
+    expect(res.headers.get('access-control-allow-methods')).toContain('GET');
   });
 });
 

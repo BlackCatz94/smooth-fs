@@ -1,4 +1,5 @@
 import { apiEnvelopeSchema } from '@smoothfs/shared';
+import { cors } from '@elysiajs/cors';
 import { Elysia } from 'elysia';
 import IORedis from 'ioredis';
 import { sql } from 'drizzle-orm';
@@ -44,6 +45,13 @@ export function buildApp(container: Container) {
   };
 
   return new Elysia()
+    .use(
+      cors({
+        origin: env.FRONTEND_ORIGIN,
+        methods: ['GET', 'POST', 'OPTIONS'],
+        exposeHeaders: ['x-request-id', 'x-response-time-ms'],
+      }),
+    )
     .onRequest(({ request }) => {
       starts.set(request, performance.now());
     })

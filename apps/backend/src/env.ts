@@ -39,6 +39,8 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
   CACHE_REDIS_DB: z.coerce.number().int().min(0).max(15).default(1),
   CACHE_TTL_MS: z.coerce.number().int().min(100).max(24 * 60 * 60 * 1000).default(60_000),
+
+  FRONTEND_ORIGIN: z.string().min(1).default('http://localhost:5173'),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -93,6 +95,7 @@ export function loadEnv(): AppEnv {
     ENABLE_CACHE: pickString('ENABLE_CACHE'),
     CACHE_REDIS_DB: pickString('CACHE_REDIS_DB'),
     CACHE_TTL_MS: pickString('CACHE_TTL_MS'),
+    FRONTEND_ORIGIN: pickString('FRONTEND_ORIGIN'),
   };
 
   const result = envSchema.safeParse(raw);

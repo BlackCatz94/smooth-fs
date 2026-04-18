@@ -16,6 +16,7 @@
     "db:seed": "bun run src/adapters/db/seed.ts"
   },
   "dependencies": {
+    "@elysiajs/cors": "^1.4.1",
     "@smoothfs/shared": "workspace:*",
     "bullmq": "^5.37.0",
     "drizzle-orm": "^0.38.4",

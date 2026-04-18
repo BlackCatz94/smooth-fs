@@ -4,6 +4,7 @@ import {
   folderContentsDataSchema,
   folderIdParamSchema,
   folderListDataSchema,
+  folderPathDataSchema,
   folderRestoreDataSchema,
   folderSearchDataSchema,
   paginationQuerySchema,
@@ -19,6 +20,7 @@ const folderListEnvelope = apiEnvelopeSchema(folderListDataSchema);
 const folderContentsEnvelope = apiEnvelopeSchema(folderContentsDataSchema);
 const folderSearchEnvelope = apiEnvelopeSchema(folderSearchDataSchema);
 const folderRestoreEnvelope = apiEnvelopeSchema(folderRestoreDataSchema);
+const folderPathEnvelope = apiEnvelopeSchema(folderPathDataSchema);
 
 /**
  * Phase 3 HTTP surface: `/api/v1/folders/*`. Everything here is a thin adapter:
@@ -183,6 +185,36 @@ export function buildFolderRoutes(container: Container) {
               hasMore: contents.files.nextCursor !== null,
             },
           },
+          meta: buildMeta({
+            requestId,
+            env: env.NODE_ENV,
+            endpointMs,
+          }),
+        });
+      })
+
+      // GET /api/v1/folders/:id/path — path to root for breadcrumbs
+      .get('/:id/path', async ({ request, set, params }) => {
+        const start = performance.now();
+        const requestId = resolveRequestId(request);
+        set.headers['x-request-id'] = requestId;
+        const log = forRequest(logger, requestId);
+
+        const { id } = folderIdParamSchema.parse(params);
+        const path = await services.getFolderPath.exec({ folderId: id });
+
+        const endpointMs = Math.round(performance.now() - start);
+        log.info(
+          {
+            op: 'folders.getPath',
+            folderId: id,
+            endpointMs,
+            pathLength: path.length,
+          },
+          'handled',
+        );
+        return folderPathEnvelope.parse({
+          data: { items: path.map(toFolderNodeDto) },
           meta: buildMeta({
             requestId,
             env: env.NODE_ENV,

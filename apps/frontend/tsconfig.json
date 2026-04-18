@@ -7,11 +7,7 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@/components/*": ["./src/components/*"],
-      "@/composables/*": ["./src/composables/*"],
-      "@/stores/*": ["./src/stores/*"],
-      "@/tree/*": ["./src/tree/*"],
-      "@/lib/*": ["./src/lib/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": [
