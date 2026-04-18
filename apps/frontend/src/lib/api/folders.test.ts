@@ -40,8 +40,18 @@ const U_ROOT = '11111111-1111-4111-8111-111111111111';
 const U_A = '22222222-2222-4222-8222-222222222222';
 const U_B = '33333333-3333-4333-8333-333333333333';
 
+/**
+ * The typed fetch signature we mount onto `globalThis.fetch`. Vitest's
+ * `MockInstance<T>` preserves the argument types under `.mock.calls[n][k]`,
+ * so assertions on `init?.method` stay type-safe without casting.
+ *
+ * We declare the local alias because `ReturnType<typeof vi.spyOn>` by
+ * itself collapses to a generic `(...args: unknown[]) => unknown` signature.
+ */
+type FetchSpy = import('vitest').MockInstance<typeof fetch>;
+
 describe('foldersApi', () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: FetchSpy;
 
   beforeEach(() => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');

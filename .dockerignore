@@ -1,0 +1,19 @@
+# Root-level .dockerignore for monorepo-aware builds.
+# Keep this broad but DO NOT exclude the workspaces: builds at the repo root
+# need `apps/`, `packages/`, `package.json`, `bun.lock`, and `turbo.json`.
+node_modules
+**/node_modules
+**/dist
+**/coverage
+**/.turbo
+**/test-results
+**/playwright-report
+.git
+.github
+.cursor
+.plan
+.env
+.env.*
+!**/.env.example
+*.log
+.DS_Store

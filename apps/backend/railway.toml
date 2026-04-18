@@ -1,0 +1,36 @@
+# ============================================================================
+# Railway service config — SmoothFS backend
+#
+# IMPORTANT — Root Directory must be LEFT EMPTY on the Railway service.
+# The Dockerfile copies `packages/shared` alongside `apps/backend`, so the
+# Docker build context must be the REPO ROOT. If you set Root Directory to
+# `apps/backend`, Railway will narrow the context and the build will fail
+# with:  "COPY packages/shared ...: not found".
+#
+# To avoid rebuilding on unrelated changes, use Watch Paths instead:
+#   apps/backend/**
+#   packages/shared/**
+#   bun.lock
+#   package.json
+# ============================================================================
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/backend/Dockerfile"
+
+[deploy]
+# Pre-deploy runs ONCE per release, before traffic cuts over. A single
+# `db:bootstrap` script runs migrate + seed in one process — more reliable
+# than chaining with `&&` across Railway's shell (some builder versions
+# silently truncate long commands in the UI, and `ash` vs `bash` quoting
+# of `--filter @smoothfs/backend` has bitten us). Migrations are
+# idempotent; seed TRUNCATEs + re-seeds the deterministic fixture —
+# exactly the "data refreshes on each deploy" behaviour we want for a
+# demo.
+preDeployCommand = "bun run --filter @smoothfs/backend db:bootstrap"
+
+startCommand = "bun run src/index.ts"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

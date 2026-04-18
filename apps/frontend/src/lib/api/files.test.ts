@@ -11,8 +11,10 @@ function ok(body: unknown, status = 200) {
   });
 }
 
+type FetchSpy = import('vitest').MockInstance<typeof fetch>;
+
 describe('filesApi', () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: FetchSpy;
 
   beforeEach(() => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');

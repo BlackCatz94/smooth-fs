@@ -1,0 +1,74 @@
+# ============================================================================
+# Nginx config template for the SmoothFS Vue SPA on Railway.
+#
+# The `.template` suffix is the signal to `nginx:alpine`'s entrypoint script
+# to run this file through `envsubst` before nginx starts. That's how we
+# interpolate `$PORT` — Railway injects `PORT` as an env var and expects the
+# container to listen on it; if we hardcode `listen 80`, the proxy can't
+# reach us and every healthcheck fails with "service unavailable".
+#
+# Important: only the `${PORT}` shell-syntax variable is substituted here.
+# `$uri`, `$host`, etc. are nginx runtime variables (no braces) and are
+# passed through untouched — that's by design in `envsubst`.
+#
+# Key choices:
+#   - `try_files $uri /index.html` so Vue Router's history-mode deep links
+#     (/folders/:id) resolve instead of 404.
+#   - Long immutable-cache on hashed asset URLs under /assets/; no cache on
+#     index.html so new deploys invalidate cleanly.
+#   - Gzip on for text-like payloads; Railway's edge adds Brotli on top.
+# ============================================================================
+
+server {
+    # Dual-stack bind. Railway routes internal traffic to containers over IPv6
+    # (the edge proxy → pod hop is on an IPv6 mesh); a plain `listen ${PORT}`
+    # binds IPv4 only, so Railway's healthcheck sees TCP refused and reports
+    # "service unavailable". Bind IPv4 and IPv6 separately; `ipv6only=on` keeps
+    # the two listens from fighting each other on kernels where the IPv6
+    # socket would otherwise also claim IPv4 (net.ipv6.bindv6only=0).
+    listen       ${PORT} default_server;
+    listen       [::]:${PORT} ipv6only=on default_server;
+    server_name  _;
+
+    root   /usr/share/nginx/html;
+    index  index.html;
+
+    # Security + sanity headers (kept minimal; CORS lives on the backend).
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options         "SAMEORIGIN" always;
+    add_header Referrer-Policy         "strict-origin-when-cross-origin" always;
+
+    gzip              on;
+    gzip_vary         on;
+    gzip_min_length   1024;
+    gzip_comp_level   6;
+    gzip_types
+        text/plain
+        text/css
+        text/javascript
+        application/javascript
+        application/json
+        application/xml
+        image/svg+xml;
+
+    # Vite emits hashed filenames under /assets/ — safe to cache aggressively.
+    location ^~ /assets/ {
+        access_log  off;
+        add_header  Cache-Control "public, max-age=31536000, immutable";
+        try_files   $uri =404;
+    }
+
+    # Everything else: SPA fallback. Never cache the shell HTML, so a
+    # deploy flips users to the new bundle on their next navigation.
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-store" always;
+    }
+
+    # Trivial liveness probe; Railway's healthcheck hits this.
+    location = /healthz {
+        access_log off;
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+}

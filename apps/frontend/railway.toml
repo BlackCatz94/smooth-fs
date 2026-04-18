@@ -1,0 +1,42 @@
+# ============================================================================
+# Railway service config — SmoothFS frontend (Vue 3 SPA)
+#
+# IMPORTANT — Root Directory must be LEFT EMPTY on the Railway service.
+# The Dockerfile copies `packages/shared` alongside `apps/frontend`, so the
+# Docker build context must be the REPO ROOT. If you set Root Directory to
+# `apps/frontend`, Railway will narrow the context and the build will fail
+# with:  "COPY packages/shared ...: not found".
+#
+# To avoid rebuilding on unrelated changes, use Watch Paths instead:
+#   apps/frontend/**
+#   packages/shared/**
+#   bun.lock
+#   package.json
+#
+# Vite inlines `VITE_*` vars at BUILD time. Railway forwards matching
+# service variables to the Docker build as --build-args automatically,
+# which is why `VITE_API_BASE_URL` + `VITE_DEMO_MODE` are declared as ARGs
+# in the Dockerfile.
+# ============================================================================
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/frontend/Dockerfile"
+
+[deploy]
+# Intentionally NO `startCommand` — we inherit the Dockerfile's CMD, which
+# preserves the `nginx:alpine` ENTRYPOINT (`/docker-entrypoint.sh`) responsible
+# for envsubst-ing `/etc/nginx/templates/*.template` into real configs before
+# nginx starts. Overriding startCommand here risks bypassing that step on
+# some Railway builder versions.
+#
+# healthcheckTimeout is the TOTAL retry window Railway gives the probe to
+# succeed. Nginx spawns one worker per host CPU; on a beefy Railway node
+# that's 48+ processes all racing to bind sockets, so the first probe can
+# fire a few hundred ms before `/healthz` is answering. 120s gives ample
+# slack without masking a real failure — a genuinely broken container will
+# still fail every attempt.
+healthcheckPath = "/healthz"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

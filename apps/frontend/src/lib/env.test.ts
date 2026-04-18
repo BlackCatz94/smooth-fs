@@ -39,4 +39,29 @@ describe('frontend env loader', () => {
     const { loadEnv } = await reloadModule();
     expect(() => loadEnv()).toThrow();
   });
+
+  it('VITE_DEMO_MODE defaults to false when unset', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3000');
+    const { loadEnv } = await reloadModule();
+    expect(loadEnv().VITE_DEMO_MODE).toBe(false);
+  });
+
+  it('VITE_DEMO_MODE coerces "true"/"1"/"yes" to true (case-insensitive)', async () => {
+    for (const truthy of ['true', 'True', '1', 'yes', 'YES']) {
+      vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3000');
+      vi.stubEnv('VITE_DEMO_MODE', truthy);
+      const { loadEnv } = await reloadModule();
+      expect(loadEnv().VITE_DEMO_MODE).toBe(true);
+    }
+  });
+
+  it('VITE_DEMO_MODE treats any other string as false rather than rejecting', async () => {
+    // We prefer "unexpected value → safe default" over throwing here: the
+    // banner is cosmetic, and an accidental `VITE_DEMO_MODE=somethingelse`
+    // shouldn't brick the whole frontend boot.
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3000');
+    vi.stubEnv('VITE_DEMO_MODE', 'definitely not truthy');
+    const { loadEnv } = await reloadModule();
+    expect(loadEnv().VITE_DEMO_MODE).toBe(false);
+  });
 });

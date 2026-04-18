@@ -4,6 +4,14 @@ A high-performance, web-based Windows Explorer clone with unlimited folder depth
 
 Built to optimize for three non-negotiables, in order: **Smooth** (no dropped frames, no DOM thrash), **Reliable** (strict types end-to-end, validated inputs, explicit errors), and **Debuggable** (structured logs with correlation IDs, env-driven config, no silent catches).
 
+## Try it live
+
+> **Live demo:** https://smoothfs.cloud — API at https://api.smoothfs.cloud/health
+>
+> The demo is seeded with a deterministic fixture (1 root → a 32-deep linear chain + a 64-wide fan-out + 8 files per fanned-out folder). A banner reminds visitors that data resets on each deploy, so destructive actions (soft-delete, restore) are safe to try.
+>
+> Infrastructure: Railway (Bun runtime for backend, nginx:alpine for frontend, managed Postgres 16 + Redis 7). See [DEPLOYMENT.md](./DEPLOYMENT.md) for the full setup including custom-domain DNS.
+
 ## Stack
 
 | Layer | Choice |
@@ -138,6 +146,15 @@ See [.plan/02_database-architecture.md](.plan/02_database-architecture.md) for t
 - Selection + expanded-id set persists to `localStorage` (intent only; the server is the source of truth for tree shape).
 - Deep links: `/folders/:id` rehydrates ancestry via `GET /api/v1/folders/:id/path`.
 - All fetches validate the response with the shared Zod schema — drift fails loudly.
+
+## Deployment
+
+A complete, click-by-click Railway deploy guide lives in [DEPLOYMENT.md](./DEPLOYMENT.md). Short version:
+
+- `apps/backend/Dockerfile` — monorepo-aware Bun image.
+- `apps/frontend/Dockerfile` — Vite build → nginx:alpine with SPA history fallback + immutable asset cache.
+- `apps/*/railway.toml` — Railway service configs (healthchecks, pre-deploy migrate + seed, restart policy).
+- The Dockerfiles also work untouched on Fly.io, Render, or any plain Docker host — Railway isn't a lock-in.
 
 ## Test coverage
 

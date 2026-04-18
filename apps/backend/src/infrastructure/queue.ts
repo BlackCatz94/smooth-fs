@@ -1,7 +1,11 @@
 import IORedis, { type Redis } from 'ioredis';
 import type { AppEnv } from '../env';
 
-export const CLEANUP_QUEUE_NAME = 'smoothfs:cleanup';
+// BullMQ 5+ rejects queue names containing ':' — it uses ':' internally as the
+// Redis key separator (e.g. `bull:<queue>:<jobId>`). Use a hyphen instead; the
+// full Redis keys still end up namespaced as `bull:smoothfs-cleanup:*`, which
+// is exactly what you want for isolation on a shared Redis instance.
+export const CLEANUP_QUEUE_NAME = 'smoothfs-cleanup';
 export const CLEANUP_JOB_NAME = 'soft-delete-cleanup';
 
 /**

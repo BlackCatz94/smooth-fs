@@ -8,9 +8,17 @@ import Breadcrumb from '@/components/Breadcrumb.vue';
 import SearchPopover from '@/components/SearchPopover.vue';
 import AppLogo from '@/components/AppLogo.vue';
 import ToastHost from '@/components/ToastHost.vue';
+import DemoBanner from '@/components/DemoBanner.vue';
 import { useFolderPath } from '@/composables/useFolderPath';
 import { useResizablePanel } from '@/composables/useResizablePanel';
 import { useStatusStore } from '@/stores/status';
+import { getEnv } from '@/lib/env';
+
+// Evaluated once at setup — the env is immutable at runtime, so there's no
+// reason to recompute. Using a constant also keeps the banner out of the
+// DOM entirely in production-like deployments (tree-shakes in practice
+// because `v-if="false"` on a top-level static branch is cheap).
+const demoMode = getEnv().VITE_DEMO_MODE;
 
 const route = useRoute();
 const router = useRouter();
@@ -118,6 +126,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-screen w-full flex-col bg-slate-50 text-slate-900 font-sans overflow-hidden">
+    <DemoBanner v-if="demoMode" />
     <!-- Top Navigation Bar -->
     <header class="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200 border-t-4 border-t-emerald-500 bg-white px-4 shadow-sm z-10">
       <div class="flex min-w-0 flex-1 items-center gap-4">
