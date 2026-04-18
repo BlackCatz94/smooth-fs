@@ -354,7 +354,7 @@ function handleKeydown(e: KeyboardEvent): void {
         <span v-if="tree.error.requestId"> · req: {{ tree.error.requestId }}</span>
       </div>
       <button
-        class="mt-2 text-xs text-sky-600 hover:underline"
+        class="mt-2 text-xs text-emerald-600 hover:underline"
         @click="tree.clearError()"
       >
         Dismiss

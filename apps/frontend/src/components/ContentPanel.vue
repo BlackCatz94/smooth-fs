@@ -428,7 +428,7 @@ function onScrollerUpdate(_startIndex: number, endIndex: number): void {
       class="flex h-full items-center justify-center"
     >
       <div
-        class="h-8 w-8 animate-spin rounded-full border-4 border-sky-500 border-t-transparent"
+        class="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
         role="status"
         aria-label="Loading contents"
       />
@@ -532,11 +532,11 @@ function onScrollerUpdate(_startIndex: number, endIndex: number): void {
             role="listitem"
             :aria-selected="selectedKey === item.key"
             :tabindex="focusedKey === item.key ? 0 : -1"
-            class="m-2 flex items-center gap-3 rounded-lg border bg-white p-3 shadow-sm transition-all cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-sky-500"
+            class="m-2 flex items-center gap-3 rounded-lg border bg-white p-3 shadow-sm transition-all cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
             :class="[
               selectedKey === item.key
-                ? 'border-sky-400 bg-sky-50'
-                : 'border-slate-200 hover:border-slate-300 hover:shadow',
+                ? 'border-emerald-400 bg-emerald-50'
+                : 'border-slate-200 hover:border-emerald-300 hover:shadow',
             ]"
             @click="onItemClick(item)"
             @focus="focusedKey = item.key"
@@ -544,7 +544,7 @@ function onScrollerUpdate(_startIndex: number, endIndex: number): void {
           >
             <Folder
               v-if="item.kind === 'folder'"
-              class="h-8 w-8 text-sky-500 flex-shrink-0"
+              class="h-8 w-8 text-emerald-500 flex-shrink-0"
               aria-hidden="true"
             />
             <component
@@ -580,7 +580,7 @@ function onScrollerUpdate(_startIndex: number, endIndex: number): void {
       >
         <button
           type="button"
-          class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+          class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="loadingMore"
           @click="loadMore"
         >

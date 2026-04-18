@@ -181,14 +181,14 @@ const showEmptyState = computed(
           :aria-selected="index === activeIndex"
           :class="[
             'flex cursor-pointer items-center gap-2 px-3 py-2 text-sm',
-            index === activeIndex ? 'bg-sky-50 text-sky-900' : 'text-slate-700 hover:bg-slate-50',
+            index === activeIndex ? 'bg-emerald-50 text-emerald-900' : 'text-slate-700 hover:bg-slate-50',
           ]"
           data-testid="search-result"
           @mouseenter="activeIndex = index"
           @mousedown.prevent="selectResult(folder)"
         >
           <FolderIcon
-            class="h-4 w-4 shrink-0 text-sky-500"
+            class="h-4 w-4 shrink-0 text-emerald-500"
             aria-hidden="true"
           />
           <span class="truncate">{{ folder.name }}</span>

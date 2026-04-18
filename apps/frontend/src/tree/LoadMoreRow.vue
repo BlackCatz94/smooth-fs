@@ -34,7 +34,7 @@ function onFocus(): void {
     reach it with ArrowDown and press Enter to load the next page.
   -->
   <div
-    class="flex h-8 w-full items-center cursor-pointer select-none border-b border-transparent text-sky-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-inset"
+    class="flex h-8 w-full items-center cursor-pointer select-none border-b border-transparent text-emerald-700 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset"
     :style="{ paddingLeft }"
     role="none"
     data-tree-load-more="true"
@@ -48,11 +48,11 @@ function onFocus(): void {
     >
       <Loader2
         v-if="props.isLoading"
-        class="h-4 w-4 animate-spin text-sky-500"
+        class="h-4 w-4 animate-spin text-emerald-500"
       />
       <MoreHorizontal
         v-else
-        class="h-4 w-4 text-sky-500"
+        class="h-4 w-4 text-emerald-500"
       />
     </span>
     <span class="truncate text-[13px] font-medium">

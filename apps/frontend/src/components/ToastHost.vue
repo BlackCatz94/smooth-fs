@@ -71,7 +71,7 @@ function onKeydown(id: number, e: KeyboardEvent): void {
         :key="t.id"
         :data-testid="`toast-${t.id}`"
         :data-variant="t.variant"
-        class="pointer-events-auto flex items-start gap-3 rounded-md border px-3 py-2 shadow-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+        class="pointer-events-auto flex items-start gap-3 rounded-md border px-3 py-2 shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
         :class="variantClasses(t.variant)"
         tabindex="0"
         @mouseenter="toasts.pause(t.id)"
@@ -94,7 +94,7 @@ function onKeydown(id: number, e: KeyboardEvent): void {
         <button
           v-if="t.action"
           type="button"
-          class="shrink-0 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-60 disabled:cursor-not-allowed"
+          class="shrink-0 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
           :disabled="t.actionPending"
           :data-testid="`toast-action-${t.id}`"
           @click="toasts.activate(t.id)"
@@ -108,7 +108,7 @@ function onKeydown(id: number, e: KeyboardEvent): void {
         </button>
         <button
           type="button"
-          class="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+          class="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           aria-label="Dismiss notification"
           :data-testid="`toast-dismiss-${t.id}`"
           @click="toasts.dismiss(t.id)"
@@ -132,7 +132,7 @@ function onKeydown(id: number, e: KeyboardEvent): void {
         :key="t.id"
         :data-testid="`toast-${t.id}`"
         :data-variant="t.variant"
-        class="pointer-events-auto flex items-start gap-3 rounded-md border px-3 py-2 shadow-md focus:outline-none focus:ring-2 focus:ring-sky-500"
+        class="pointer-events-auto flex items-start gap-3 rounded-md border px-3 py-2 shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
         :class="variantClasses(t.variant)"
         tabindex="0"
         @mouseenter="toasts.pause(t.id)"

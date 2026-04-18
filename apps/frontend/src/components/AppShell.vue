@@ -119,7 +119,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-screen w-full flex-col bg-slate-50 text-slate-900 font-sans overflow-hidden">
     <!-- Top Navigation Bar -->
-    <header class="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 shadow-sm z-10">
+    <header class="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200 border-t-4 border-t-emerald-500 bg-white px-4 shadow-sm z-10">
       <div class="flex min-w-0 flex-1 items-center gap-4">
         <div class="flex shrink-0 items-center gap-2 font-semibold text-slate-900">
           <AppLogo
@@ -132,7 +132,7 @@ onBeforeUnmount(() => {
         <div class="flex shrink-0 items-center gap-1 text-slate-500">
           <button
             type="button"
-            class="rounded p-1 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            class="rounded p-1 hover:bg-emerald-50 hover:text-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
             title="Back"
             aria-label="Back"
             @click="goBack"
@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="rounded p-1 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            class="rounded p-1 hover:bg-emerald-50 hover:text-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
             title="Forward"
             aria-label="Forward"
             @click="goForward"
@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="rounded p-1 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="rounded p-1 hover:bg-emerald-50 hover:text-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
             title="Up"
             aria-label="Up"
             :disabled="!canGoUp"
@@ -175,7 +175,7 @@ onBeforeUnmount(() => {
                 type="text"
                 placeholder="Search folders..."
                 aria-label="Search folders"
-                class="h-8 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                class="h-8 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 :value="value"
                 @input="onInput(($event.target as HTMLInputElement).value)"
                 @focus="onFocus"
@@ -219,8 +219,8 @@ onBeforeUnmount(() => {
         :aria-valuemax="MAX_PANEL"
         :aria-valuenow="leftPanelWidth"
         tabindex="0"
-        class="relative w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-sky-400 focus:outline-none focus:bg-sky-500 transition-colors"
-        :class="{ 'bg-sky-500': isDragging }"
+        class="relative w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-emerald-400 focus:outline-none focus:bg-emerald-500 transition-colors"
+        :class="{ 'bg-emerald-500': isDragging }"
         @pointerdown="onPointerDown"
         @keydown="onResizeHandleKey"
       >

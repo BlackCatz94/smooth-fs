@@ -34,7 +34,7 @@ function goTo(id: string): void {
   >
     <button
       type="button"
-      class="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+        class="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-emerald-50 hover:text-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
       :aria-current="segments.length === 0 ? 'page' : undefined"
       @click="goHome"
     >
@@ -55,7 +55,7 @@ function goTo(id: string): void {
       />
       <button
         type="button"
-        class="max-w-[12rem] shrink min-w-0 truncate rounded px-1.5 py-0.5 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+        class="max-w-[12rem] shrink min-w-0 truncate rounded px-1.5 py-0.5 hover:bg-emerald-50 hover:text-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
         :class="index === segments.length - 1 ? 'font-medium text-slate-900' : ''"
         :aria-current="index === segments.length - 1 ? 'page' : undefined"
         :title="segment.name"

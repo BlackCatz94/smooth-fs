@@ -52,8 +52,8 @@ function onFocus(): void {
 
 <template>
   <div
-    class="flex h-8 w-full items-center cursor-pointer select-none border-b border-transparent transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-inset"
-    :class="{ 'bg-sky-100 text-sky-900': isSelected }"
+    class="flex h-8 w-full items-center cursor-pointer select-none border-b border-transparent transition-colors hover:bg-emerald-50/50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset"
+    :class="{ 'bg-emerald-50 text-emerald-900': isSelected }"
     :style="{ paddingLeft }"
     :data-tree-item-id="props.row.id"
     role="treeitem"
@@ -66,7 +66,7 @@ function onFocus(): void {
   >
     <button
       v-if="!props.row.isLeaf"
-      class="flex h-6 w-6 items-center justify-center rounded hover:bg-slate-200 focus:outline-none mr-1"
+      class="flex h-6 w-6 items-center justify-center rounded hover:bg-emerald-100/50 focus:outline-none mr-1"
       tabindex="-1"
       :aria-label="props.row.isExpanded ? 'Collapse' : 'Expand'"
       @click="onToggle"
@@ -86,18 +86,18 @@ function onFocus(): void {
       aria-hidden="true"
     />
 
-    <Folder class="h-4 w-4 mr-2 text-sky-600 flex-shrink-0" />
+    <Folder class="h-4 w-4 mr-2 text-emerald-600 flex-shrink-0" />
 
     <span
       class="truncate text-[15px] font-medium"
-      :class="isSelected ? 'text-sky-900' : 'text-slate-900'"
+      :class="isSelected ? 'text-emerald-900' : 'text-slate-900'"
     >
       {{ props.row.node.name }}
     </span>
 
     <span
       v-if="props.row.isLoading"
-      class="ml-2 h-3 w-3 animate-spin rounded-full border-2 border-sky-500 border-t-transparent"
+      class="ml-2 h-3 w-3 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"
       aria-hidden="true"
     />
   </div>

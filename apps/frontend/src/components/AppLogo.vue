@@ -30,10 +30,10 @@ defineProps<{
         y2="32"
         gradientUnits="userSpaceOnUse"
       >
-        <stop stop-color="#0EA5E9" />
+        <stop stop-color="#34d399" />
         <stop
           offset="1"
-          stop-color="#2563EB"
+          stop-color="#059669"
         />
       </linearGradient>
     </defs>
