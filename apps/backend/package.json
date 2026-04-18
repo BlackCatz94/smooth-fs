@@ -8,6 +8,7 @@
     "build": "bun build src/index.ts --outdir=dist --target=bun",
     "start": "bun run dist/index.js",
     "test": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=./coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --config ../../eslint.config.js .",
     "db:generate": "drizzle-kit generate",

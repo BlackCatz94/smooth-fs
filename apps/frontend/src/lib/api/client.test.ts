@@ -104,4 +104,66 @@ describe('api client', () => {
     expect((err as ApiClientError).code).toBe('NETWORK_ERROR');
     expect((err as ApiClientError).requestId).toBeTruthy();
   });
+
+  it('surfaces TIMEOUT when the internal timer aborts the fetch', async () => {
+    // Simulate a hung fetch that only settles when its own AbortSignal fires.
+    // We don't plumb an external signal, so the abort originates from the
+    // client's internal timeout — which is the TIMEOUT branch we want to hit.
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          (init as RequestInit).signal?.addEventListener('abort', () => {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        }),
+    );
+
+    const client = createClient(BASE);
+    const err = await client('/slow', z.any(), { timeoutMs: 5 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiClientError);
+    expect((err as ApiClientError).code).toBe('TIMEOUT');
+  });
+
+  it('surfaces PARSE_ERROR when the response body is not valid JSON', async () => {
+    const bad = new Response('not-json{', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(bad);
+
+    const client = createClient(BASE);
+    const err = await client('/corrupt', z.any()).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiClientError);
+    expect((err as ApiClientError).code).toBe('PARSE_ERROR');
+  });
+
+  it('query values that are null or undefined are dropped from the URL', async () => {
+    const schema = z.any();
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const client = createClient(BASE);
+    await client('/q', schema, {
+      method: 'GET',
+      query: { limit: 10, cursor: null, after: undefined, flag: false },
+    });
+
+    const url = spy.mock.calls[0]?.[0] as string;
+    expect(url).toContain('limit=10');
+    expect(url).toContain('flag=false');
+    expect(url).not.toContain('cursor');
+    expect(url).not.toContain('after');
+  });
+
+  it('returns null for a 204 No Content response regardless of schema', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(null, { status: 204 }),
+    );
+    const client = createClient(BASE);
+    const out = await client('/deleted', null);
+    expect(out).toBeNull();
+  });
 });

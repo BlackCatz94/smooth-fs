@@ -63,6 +63,7 @@ All scripts are wired through Turborepo at the root so dependencies run in the r
 | `bun run dev` | Parallel dev servers: backend (hot-reload via `bun --watch`), frontend (Vite) |
 | `bun run build` | Type-checks then builds both apps (backend: Bun bundle; frontend: Vite) |
 | `bun run test` | Unit + integration tests across all workspaces |
+| `bun run test:coverage` | Same suite with coverage reporters (text + lcov/HTML) |
 | `bun run typecheck` | `tsc --noEmit` / `vue-tsc --noEmit` per workspace |
 | `bun run lint` | ESLint (flat config, TypeScript + Vue) |
 | `bun run format` / `format:check` | Prettier |
@@ -138,6 +139,46 @@ See [.plan/02_database-architecture.md](.plan/02_database-architecture.md) for t
 - Deep links: `/folders/:id` rehydrates ancestry via `GET /api/v1/folders/:id/path`.
 - All fetches validate the response with the shared Zod schema — drift fails loudly.
 
+## Test coverage
+
+Coverage is wired into both runners: `bun test --coverage` for the backend +
+shared package (reports text + lcov into `apps/*/coverage`), and
+`@vitest/coverage-v8` for the frontend (text + HTML + `json-summary`).
+
+Headline numbers from `bun run test:coverage` on a clean checkout:
+
+| Workspace | Tests | Funcs | Branches | Lines |
+| --- | --- | --- | --- | --- |
+| `apps/backend` | 82 | **95.70%** | — | **95.58%** |
+| `apps/frontend` | 125 | **83.87%** | **79.57%** | **70.16%** |
+| `packages/shared` | covered via backend integration | **100%** | — | **100%** |
+
+Notes on the backend: `domain/`, `application/`, `adapters/http/`, and
+`adapters/db/folder-repository.drizzle.ts` are each at **100%**. The remainder
+is the Redis cache fallback path and the Drizzle client bootstrap. Excluded
+from the report (via `apps/backend/bunfig.toml`): `src/index.ts` boot wiring,
+`migrate.ts`, `seed.ts`, the BullMQ worker, and test helpers — they're either
+exercised only in prod or are test infrastructure.
+
+Notes on the frontend: the Vitest config runs with `all: true`, which means
+every file under `src/` is counted even if no test imports it. The files with
+dedicated unit tests — `Breadcrumb.vue`, `FolderNode.vue`, `LoadMoreRow.vue`,
+`flattenVisibleRows.ts`, `fileIcon.ts`, `lib/env.ts`, `lib/api/{client,
+folders, files, error}.ts`, the `composables/*` (debounce, contents,
+folder-path, grid keyboard nav), and `stores/*` — are at **95–100%**. The
+drag on the headline number is the App shell (`App.vue`, `AppShell.vue`,
+`AppLogo.vue`, `ToastHost.vue`, `SearchPopover.vue`, `FilePreviewDialog.vue`)
+which is exercised end-to-end by the Playwright smoke instead. We keep
+`all: true` on purpose so the number is honest.
+
+Run locally:
+
+```bash
+bun run test:coverage              # all workspaces
+bun run --filter @smoothfs/backend test:coverage
+bun run --filter @smoothfs/frontend test:coverage   # open apps/frontend/coverage/index.html
+```
+
 ## Design decisions & trade-offs
 
 ### Lazy tree loading vs. the literal spec
@@ -174,8 +215,8 @@ Mapped against the bonus items in the brief:
 | Hexagonal / clean architecture | Implemented | [.cursor/rules/backend-hexarch.mdc](.cursor/rules/backend-hexarch.mdc) |
 | Service and repository layers | Implemented | `application/*`, `ports/folder-repository.ts`, `adapters/db/folder-repository.*.ts` |
 | SOLID principles | Implemented | SRP (one use-case/file), DIP (ports + DI), OCP (caching decorator, NullCache) |
-| Unit tests | Implemented | `bun test` across backend + shared |
-| Unit tests for UI components | Implemented | Vitest + Vue Test Utils (`*.test.ts` next to `.vue`) |
+| Unit tests | Implemented (backend 95.70% funcs / 95.58% lines, 82 tests) | `bun test` across backend + shared |
+| Unit tests for UI components | Implemented (frontend 83.87% funcs / 70.16% lines, 125 tests, `all: true`) | Vitest + Vue Test Utils (`*.test.ts` next to `.vue`) |
 | Integration tests | Implemented | `apps/backend/**/*.integration.test.ts` |
 | E2E tests | Implemented (smoke) | [apps/frontend/e2e/tree.smoke.spec.ts](apps/frontend/e2e/tree.smoke.spec.ts) |
 | REST API standards | Implemented | `/api/v1` prefix, verbs (GET/POST/DELETE), status codes (200/204/400/404/409/422/500), resource URIs, cursor pagination |

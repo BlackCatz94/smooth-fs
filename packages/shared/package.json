@@ -11,6 +11,7 @@
   "scripts": {
     "build": "bun run typecheck && bun -e \"await Bun.write('dist/.build-stamp', new Date().toISOString())\"",
     "test": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=./coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --config ../../eslint.config.js ."
   },

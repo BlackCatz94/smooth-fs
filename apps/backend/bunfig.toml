@@ -1,0 +1,15 @@
+[test]
+# Exclude test files themselves from the coverage report so the numbers
+# reflect coverage OF PRODUCTION code, not the (trivially 100%) test files.
+coverageSkipTestFiles = true
+# Infrastructure entrypoints that run only under `bun dev`/prod boot aren't
+# exercised by unit/integration tests and would skew the headline number.
+# We keep them excluded from the report rather than hand-wave 0% coverage.
+coveragePathIgnorePatterns = [
+  "src/adapters/db/migrate.ts",
+  "src/adapters/db/seed.ts",
+  "src/adapters/db/test-helpers.ts",
+  "src/infrastructure/cleanup-worker.ts",
+  "src/infrastructure/queue.ts",
+  "src/index.ts",
+]
