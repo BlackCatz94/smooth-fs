@@ -14,6 +14,7 @@ function makeRow(overrides: Partial<VisibleRow> = {}): VisibleRow {
     deletedAt: null,
   };
   return {
+    kind: 'folder',
     id: 'n1',
     node,
     depth: 0,

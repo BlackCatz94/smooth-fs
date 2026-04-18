@@ -60,8 +60,38 @@ function pickString(
 }
 
 /**
- * Parse and cache process environment. Exits the process on the first invalid config
- * (non-test) with a Zod error shape (no silent failure).
+ * Thrown when the environment fails schema validation. Callers can inspect
+ * `issues` for field-level detail (e.g. to render a CLI hint) without having
+ * to import Zod. We deliberately do NOT call `process.exit` from the loader
+ * — that's the responsibility of the binary entrypoint (`src/index.ts`).
+ * This makes the loader safe to call from tests, tooling (migrations, seed
+ * scripts), and embedding hosts without corrupting their exit flow.
+ */
+export class InvalidEnvError extends Error {
+  readonly name = 'InvalidEnvError';
+  readonly issues: ReadonlyArray<z.ZodIssue>;
+  readonly fieldErrors: Readonly<Record<string, readonly string[] | undefined>>;
+
+  constructor(zodError: z.ZodError) {
+    const flat = zodError.flatten();
+    const summary = Object.entries(flat.fieldErrors)
+      .filter(([, msgs]) => msgs && msgs.length > 0)
+      .map(([key, msgs]) => `${key}: ${(msgs ?? []).join('; ')}`)
+      .join(' | ');
+    super(
+      summary
+        ? `Invalid environment configuration — ${summary}`
+        : 'Invalid environment configuration',
+    );
+    this.issues = zodError.issues;
+    this.fieldErrors = flat.fieldErrors as Record<string, readonly string[] | undefined>;
+  }
+}
+
+/**
+ * Parse and cache process environment. Throws `InvalidEnvError` when the
+ * shape is wrong; callers decide whether to exit, log, or retry. The
+ * entrypoint converts this into `process.exit(1)`; tests assert on it.
  */
 export function loadEnv(): AppEnv {
   if (cached) {
@@ -100,10 +130,7 @@ export function loadEnv(): AppEnv {
 
   const result = envSchema.safeParse(raw);
   if (!result.success) {
-    console.error('Invalid environment configuration:');
-    console.error(result.error.flatten().fieldErrors);
-    console.error(result.error.issues);
-    process.exit(1);
+    throw new InvalidEnvError(result.error);
   }
   cached = result.data;
   return cached;

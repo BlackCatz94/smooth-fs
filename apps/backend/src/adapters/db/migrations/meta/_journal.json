@@ -15,6 +15,13 @@
       "when": 1776500000000,
       "tag": "0001_pg_trgm_folders_name",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776540000000,
+      "tag": "0002_keyset_indexes",
+      "breakpoints": true
     }
   ]
 }

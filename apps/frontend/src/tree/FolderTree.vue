@@ -2,10 +2,12 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTreeStore } from './tree.store';
-import { flattenVisibleRows } from './flattenVisibleRows';
+import { flattenVisibleRows, type TreeRow } from './flattenVisibleRows';
 import FolderNode from './FolderNode.vue';
+import LoadMoreRow from './LoadMoreRow.vue';
 import { RecycleScroller } from 'vue-virtual-scroller';
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
+import { Info } from 'lucide-vue-next';
 
 const route = useRoute();
 const router = useRouter();
@@ -72,15 +74,25 @@ watch(
   },
 );
 
-const visibleRows = computed(() =>
+const visibleRows = computed<TreeRow[]>(() =>
   flattenVisibleRows(
     tree.rootIds,
     tree.nodes,
     tree.children,
     tree.expanded,
     tree.loading,
+    tree.childrenHasMore,
+    tree.loadingMore,
   ),
 );
+
+function activateLoadMore(parentId: string | null): void {
+  if (parentId === null) {
+    void tree.loadMoreRoot();
+  } else {
+    void tree.loadMoreChildren(parentId);
+  }
+}
 
 const focusedIndex = computed(() => {
   if (!focusedId.value) return -1;
@@ -136,6 +148,46 @@ function moveFocus(nextId: string): void {
   });
 }
 
+/**
+ * Soft-delete the focused folder after explicit confirmation. We keep this
+ * minimal on purpose: the browser's built-in `confirm()` is accessible, maps
+ * the Escape key to cancel, and avoids bringing a modal subsystem online for
+ * what is a rare, destructive action. If the user cancels we no-op.
+ *
+ * After a successful delete the store prunes the id locally and clears
+ * selection if it matched. We shift focus to the next-sibling-or-previous
+ * row so keyboard users aren't thrown back to the top.
+ */
+async function handleDelete(row: Extract<TreeRow, { kind: 'folder' }>): Promise<void> {
+  const rows = visibleRows.value;
+  const idx = rows.findIndex((r) => r.id === row.id);
+  const neighbor = rows[idx + 1] ?? rows[idx - 1] ?? null;
+
+  const ok =
+    typeof window !== 'undefined'
+      ? window.confirm(
+          `Delete "${row.node.name}" and all its contents?\n\n` +
+            `The folder will be soft-deleted and can be restored.`,
+        )
+      : false;
+  if (!ok) return;
+
+  const wasSelected = tree.selectedId === row.id;
+  try {
+    await tree.softDelete(row.id);
+  } catch {
+    return;
+  }
+  if (wasSelected) {
+    await router.push({ name: 'folders' });
+  }
+  if (neighbor) {
+    moveFocus(neighbor.id);
+  } else {
+    focusedId.value = null;
+  }
+}
+
 function handleKeydown(e: KeyboardEvent): void {
   const rows = visibleRows.value;
   const idx = focusedIndex.value;
@@ -143,7 +195,33 @@ function handleKeydown(e: KeyboardEvent): void {
   const row = rows[idx];
   if (!row) return;
 
+  // Load-more sentinel rows only react to navigation + Enter/Space.
+  if (row.kind === 'load-more') {
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        if (idx < rows.length - 1) moveFocus(rows[idx + 1]!.id);
+        return;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (idx > 0) moveFocus(rows[idx - 1]!.id);
+        return;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        activateLoadMore(row.parentId);
+        return;
+      default:
+        return;
+    }
+  }
+
   switch (e.key) {
+    case 'Delete': {
+      e.preventDefault();
+      void handleDelete(row);
+      break;
+    }
     case 'ArrowDown': {
       e.preventDefault();
       if (idx < rows.length - 1) moveFocus(rows[idx + 1]!.id);
@@ -196,10 +274,35 @@ function handleKeydown(e: KeyboardEvent): void {
 <template>
   <div
     class="h-full w-full flex flex-col"
-    role="tree"
-    aria-label="Folders"
     @keydown="handleKeydown"
   >
+    <!--
+      On-demand loading hint. Kept as a compact header with a native
+      title tooltip so it:
+        - is always visible (no hover-only affordance on touch),
+        - carries the full explanation for keyboard/screen-reader users
+          (via `aria-describedby` on the tree).
+      We deliberately avoid a custom popover library here — this is static,
+      informational copy that doesn't need dismiss/focus management.
+    -->
+    <div
+      class="flex h-8 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-3 text-[11px] uppercase tracking-wide text-slate-500"
+    >
+      <Info
+        class="h-3.5 w-3.5 text-slate-400"
+        aria-hidden="true"
+      />
+      <span class="font-medium text-slate-600">Folders</span>
+      <span class="truncate">·</span>
+      <span
+        id="folder-tree-hint"
+        class="truncate normal-case tracking-normal text-[11px] text-slate-500"
+        title="SmoothFS loads folders on demand. Click the chevron (or press ArrowRight) to expand a node — only the first page of children is fetched per click. Folders with more siblings show a 'Load more' row; activate it with Enter to fetch the next page."
+      >
+        loads on demand — click ▸ to expand
+      </span>
+    </div>
+
     <div
       v-if="tree.loading.has('root')"
       class="p-4 text-sm text-slate-500"
@@ -227,6 +330,9 @@ function handleKeydown(e: KeyboardEvent): void {
     <div
       v-else
       class="flex-1 overflow-hidden"
+      role="tree"
+      aria-label="Folders"
+      aria-describedby="folder-tree-hint"
     >
       <RecycleScroller
         ref="scrollerRef"
@@ -237,11 +343,20 @@ function handleKeydown(e: KeyboardEvent): void {
         key-field="id"
       >
         <FolderNode
+          v-if="item.kind === 'folder'"
           :row="item"
           :is-selected="tree.selectedId === item.id"
           :is-focused="focusedId === item.id"
           @toggle="handleToggle"
           @select="handleSelect"
+          @focus="focusedId = item.id"
+        />
+        <LoadMoreRow
+          v-else
+          :depth="item.depth"
+          :is-loading="item.isLoading"
+          :is-focused="focusedId === item.id"
+          @activate="activateLoadMore(item.parentId)"
           @focus="focusedId = item.id"
         />
       </RecycleScroller>

@@ -223,6 +223,30 @@ export function buildFolderRoutes(container: Container) {
         });
       })
 
+      // DELETE /api/v1/folders/:id — soft-delete the folder and its subtree.
+      //
+      // Returns 204 No Content on success. Pair with `POST /:id/restore` to
+      // undo. Unknown ids bubble a `FolderNotFoundError` which the global
+      // `mapError` hook translates to 404 — we keep status-code decisions in
+      // one place rather than spreading them across controllers.
+      .delete('/:id', async ({ request, set, params }) => {
+        const start = performance.now();
+        const requestId = resolveRequestId(request);
+        set.headers['x-request-id'] = requestId;
+        const log = forRequest(logger, requestId);
+
+        const { id } = folderIdParamSchema.parse(params);
+        await services.softDeleteFolder.exec({ folderId: id });
+
+        const endpointMs = Math.round(performance.now() - start);
+        log.info(
+          { op: 'folders.softDelete', folderId: id, endpointMs },
+          'handled',
+        );
+        set.status = 204;
+        return null;
+      })
+
       // POST /api/v1/folders/:id/restore — undo the most recent soft-delete event
       .post('/:id/restore', async ({ request, set, params }) => {
         const start = performance.now();

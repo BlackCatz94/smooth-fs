@@ -102,7 +102,8 @@ test.describe('SmoothFS smoke', () => {
     await fileTile.dblclick();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText(/preview is not available yet/i);
+    // Dialog is an info dialog — surfaces kind label + created/updated metadata.
+    await expect(dialog).toContainText(/updated/i);
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
   });

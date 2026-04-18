@@ -35,11 +35,33 @@ export interface FetchOptions extends Omit<RequestInit, 'body'> {
 }
 
 export function createClient(baseUrl: string) {
-  return async <T>(
+  // Overloads: when `schema` is `null` the endpoint is expected to return
+  // 204 No Content and the caller gets back `null`. Otherwise the caller
+  // gets the parsed-and-validated `T`.
+  function request<T>(
     path: string,
     schema: z.ZodType<T>,
+    options?: FetchOptions,
+  ): Promise<T>;
+  function request(
+    path: string,
+    schema: null,
+    options?: FetchOptions,
+  ): Promise<null>;
+  function request<T>(
+    path: string,
+    schema: z.ZodType<T> | null,
     options: FetchOptions = {},
-  ): Promise<T> => {
+  ): Promise<T | null> {
+    return doRequest(path, schema, options);
+  }
+  return request;
+
+  async function doRequest<T>(
+    path: string,
+    schema: z.ZodType<T> | null,
+    options: FetchOptions = {},
+  ): Promise<T | null> {
     const url = new URL(path, baseUrl);
     if (options.query) {
       for (const [key, value] of Object.entries(options.query)) {
@@ -58,11 +80,28 @@ export function createClient(baseUrl: string) {
 
     const controller = new AbortController();
     const timeoutMs = options.timeoutMs ?? 10000;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
+    // Compose the caller's signal (if any) with our timeout controller so
+    // either source can abort the fetch. We deliberately avoid AbortSignal.any
+    // for broader runtime support (Node < 20, older browsers in tests).
+    const externalSignal = options.signal ?? null;
+    const onExternalAbort = (): void => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+      }
+    }
 
     let response: Response;
     try {
-      const { body, timeoutMs: _timeoutMs, query: _query, ...restOptions } = options;
+      const { body, timeoutMs: _timeoutMs, query: _query, signal: _signal, ...restOptions } = options;
       const fetchOpts: RequestInit = {
         ...restOptions,
         headers,
@@ -74,6 +113,9 @@ export function createClient(baseUrl: string) {
       response = await fetch(url.toString(), fetchOpts);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
+        if (externalSignal?.aborted && !timedOut) {
+          throw new ApiClientError('Request aborted', 'ABORTED', 0, requestId);
+        }
         throw new ApiClientError('Request timed out', 'TIMEOUT', 0, requestId);
       }
       throw new ApiClientError(
@@ -84,6 +126,9 @@ export function createClient(baseUrl: string) {
       );
     } finally {
       clearTimeout(timeoutId);
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', onExternalAbort);
+      }
     }
 
     if (!response.ok) {
@@ -108,6 +153,12 @@ export function createClient(baseUrl: string) {
       );
     }
 
+    // 204 No Content — no body to parse, no schema to validate. Callers that
+    // want to assert "no body" pass `null` as the schema.
+    if (response.status === 204 || schema === null) {
+      return null;
+    }
+
     let rawJson;
     try {
       rawJson = await response.json();
@@ -126,5 +177,5 @@ export function createClient(baseUrl: string) {
         err instanceof z.ZodError ? err.issues : err,
       );
     }
-  };
+  }
 }

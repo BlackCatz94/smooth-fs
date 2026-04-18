@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
-import { ref } from 'vue';
+import { defineComponent, h, ref } from 'vue';
 import { createRouter, createMemoryHistory, type Router } from 'vue-router';
+import { createPinia, setActivePinia } from 'pinia';
 import type { FolderNode, FileNode } from '@smoothfs/shared';
 
 // Hoisted so the `useContents` mock can share mutable refs with the test body.
@@ -11,12 +12,46 @@ const state = vi.hoisted(() => {
     files: { value: [] as FileNode[] },
     loading: { value: false },
     error: { value: null as unknown },
+    hasMoreFolders: { value: false },
+    hasMoreFiles: { value: false },
+    loadingMore: { value: false },
+    loadingMoreFolders: { value: false },
+    loadingMoreFiles: { value: false },
+    loadMoreFolders: vi.fn(),
+    loadMoreFiles: vi.fn(),
   };
 });
 
 vi.mock('@/composables/useContents', () => ({
   useContents: () => state,
 }));
+
+// Stub RecycleScroller so we can render every tile synchronously in happy-dom
+// (the real component needs a measured container height to compute slots).
+vi.mock('vue-virtual-scroller', () => ({
+  RecycleScroller: defineComponent({
+    name: 'RecycleScrollerStub',
+    props: {
+      items: { type: Array, required: true },
+      keyField: { type: String, default: 'id' },
+      itemSize: { type: Number, default: 32 },
+      gridItems: { type: Number, default: 1 },
+    },
+    emits: ['update'],
+    setup(props, { slots, expose }) {
+      expose({ scrollToItem: (_i: number) => undefined });
+      return () =>
+        h(
+          'div',
+          { class: 'rvs-stub' },
+          (props.items as unknown[]).map((item, index) =>
+            slots.default ? slots.default({ item, index }) : null,
+          ),
+        );
+    },
+  }),
+}));
+vi.mock('vue-virtual-scroller/dist/vue-virtual-scroller.css', () => ({}));
 
 import ContentPanel from './ContentPanel.vue';
 
@@ -31,11 +66,17 @@ function file(id: string, name: string): FileNode {
 }
 
 async function makeMountedPanel(): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {
-  // Replace shared refs for this test.
+  setActivePinia(createPinia());
+
   state.folders = ref([folder('f1', 'Patients'), folder('f2', 'Imaging')]) as unknown as typeof state.folders;
   state.files = ref([file('x1', 'notes.txt'), file('x2', 'chart.pdf')]) as unknown as typeof state.files;
   state.loading = ref(false) as unknown as typeof state.loading;
   state.error = ref(null) as unknown as typeof state.error;
+  state.hasMoreFolders = ref(false) as unknown as typeof state.hasMoreFolders;
+  state.hasMoreFiles = ref(false) as unknown as typeof state.hasMoreFiles;
+  state.loadingMore = ref(false) as unknown as typeof state.loadingMore;
+  state.loadingMoreFolders = ref(false) as unknown as typeof state.loadingMoreFolders;
+  state.loadingMoreFiles = ref(false) as unknown as typeof state.loadingMoreFiles;
 
   const router = createRouter({
     history: createMemoryHistory(),
@@ -54,10 +95,16 @@ async function makeMountedPanel(): Promise<{ wrapper: ReturnType<typeof mount>; 
 }
 
 beforeEach(() => {
+  setActivePinia(createPinia());
   state.folders = ref([]) as unknown as typeof state.folders;
   state.files = ref([]) as unknown as typeof state.files;
   state.loading = ref(false) as unknown as typeof state.loading;
   state.error = ref(null) as unknown as typeof state.error;
+  state.hasMoreFolders = ref(false) as unknown as typeof state.hasMoreFolders;
+  state.hasMoreFiles = ref(false) as unknown as typeof state.hasMoreFiles;
+  state.loadingMore = ref(false) as unknown as typeof state.loadingMore;
+  state.loadingMoreFolders = ref(false) as unknown as typeof state.loadingMoreFolders;
+  state.loadingMoreFiles = ref(false) as unknown as typeof state.loadingMoreFiles;
 });
 
 describe('ContentPanel', () => {
@@ -89,7 +136,7 @@ describe('ContentPanel', () => {
     expect(push).toHaveBeenCalledWith({ name: 'folders', params: { id: 'f1' } });
   });
 
-  it('double-click on file opens the preview dialog with file metadata', async () => {
+  it('double-click on file opens the info dialog with file metadata', async () => {
     const { wrapper } = await makeMountedPanel();
     const items = wrapper.findAll('[role="listitem"]');
     await items[2]!.trigger('dblclick');
@@ -99,7 +146,7 @@ describe('ContentPanel', () => {
     expect(dialog.exists()).toBe(true);
     expect(dialog.attributes('aria-modal')).toBe('true');
     expect(dialog.text()).toContain('notes.txt');
-    expect(dialog.text()).toContain('preview is not available yet');
+    expect(dialog.text()).toContain('Text document');
   });
 
   it('Enter on a focused file item activates preview (keyboard parity)', async () => {
@@ -118,6 +165,15 @@ describe('ContentPanel', () => {
     const push = vi.spyOn(router, 'push');
     await items[1]!.trigger('keydown', { key: 'Enter' });
     expect(push).toHaveBeenCalledWith({ name: 'folders', params: { id: 'f2' } });
+  });
+
+  it('shows a Load more button only when there is another page', async () => {
+    const { wrapper } = await makeMountedPanel();
+    expect(wrapper.find('[data-testid="content-load-more"]').exists()).toBe(false);
+
+    state.hasMoreFolders.value = true;
+    await flushPromises();
+    expect(wrapper.find('[data-testid="content-load-more"]').exists()).toBe(true);
   });
 
   it('surfaces UiError metadata in the alert region', async () => {

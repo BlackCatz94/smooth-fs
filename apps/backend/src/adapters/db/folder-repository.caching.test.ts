@@ -57,6 +57,9 @@ class InMemoryCache implements Cache {
     }
     return removed;
   }
+  async ping(): Promise<'ok' | 'down' | 'skipped'> {
+    return 'ok';
+  }
   async close(): Promise<void> {
     // no-op
   }

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { foreignKey, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /**
@@ -28,6 +29,16 @@ export const folders = pgTable(
     index('folders_parent_id_idx').on(t.parentId),
     index('folders_parent_id_name_idx').on(t.parentId, t.name),
     index('folders_deleted_at_idx').on(t.deletedAt),
+    // Partial keyset indexes added in migration 0002. The `(parent_id, name,
+    // id)` index lets the children-listing query satisfy its ORDER BY and
+    // keyset WHERE with a single index scan; the `(name, id)` index backs
+    // the search endpoint's ordered page after trigram filtering.
+    index('folders_parent_name_id_live_idx')
+      .on(t.parentId, t.name, t.id)
+      .where(sql`${t.deletedAt} IS NULL`),
+    index('folders_name_id_live_idx')
+      .on(t.name, t.id)
+      .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 
@@ -53,6 +64,11 @@ export const files = pgTable(
     }).onDelete('cascade'),
     index('files_folder_id_idx').on(t.folderId),
     index('files_deleted_at_idx').on(t.deletedAt),
+    // Mirrors `folders_parent_name_id_live_idx` — keyset ordering for the
+    // files list under a folder.
+    index('files_folder_name_id_live_idx')
+      .on(t.folderId, t.name, t.id)
+      .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

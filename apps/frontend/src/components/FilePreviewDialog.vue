@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
-import { X, FileText } from 'lucide-vue-next';
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { X } from 'lucide-vue-next';
 import type { FileNode } from '@smoothfs/shared';
+import { fileIconFor, extensionOf } from '@/lib/fileIcon';
 
 /**
  * Minimal, dependency-free modal. We don't pull in Headless UI just for this —
  * we trap focus inside the dialog, return focus to the opener on close, and
- * honour `Escape` per WAI-ARIA. Full-preview content is explicitly deferred;
- * the body states so unambiguously (clinical tone for healthcare users).
+ * honour `Escape` per WAI-ARIA.
+ *
+ * This is intentionally an *info* dialog, not a content preview: SmoothFS
+ * stores file nodes as metadata records (no blob storage), so rendering
+ * "contents" would be misleading. We show the derived kind + icon + timestamps
+ * so the user gets real information instead of a "not available yet" apology.
  */
 const props = defineProps<{
   file: FileNode | null;
 }>();
+
+const iconInfo = computed(() => (props.file ? fileIconFor(props.file.name) : null));
+const extension = computed(() => (props.file ? extensionOf(props.file.name) : ''));
 
 const emit = defineEmits<{ (e: 'close'): void }>();
 
@@ -78,8 +86,11 @@ onBeforeUnmount(() => {
       >
         <header class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div class="flex items-center gap-2 min-w-0">
-            <FileText
-              class="h-5 w-5 text-slate-400 shrink-0"
+            <component
+              :is="iconInfo?.icon"
+              v-if="iconInfo"
+              class="h-5 w-5 shrink-0"
+              :class="iconInfo.color"
               aria-hidden="true"
             />
             <h2
@@ -93,7 +104,7 @@ onBeforeUnmount(() => {
             ref="closeBtnRef"
             type="button"
             class="rounded p-1 text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            aria-label="Close preview"
+            aria-label="Close details"
             data-testid="file-preview-close"
             @click="close"
           >
@@ -102,15 +113,28 @@ onBeforeUnmount(() => {
         </header>
         <div
           id="file-preview-desc"
-          class="px-4 py-4 text-sm text-slate-700 space-y-3"
+          class="px-4 py-4 text-sm text-slate-700 space-y-4"
         >
-          <p class="text-slate-600">
-            File preview is not available yet. The file metadata is shown below; opening content
-            will arrive in a later release.
-          </p>
+          <div class="flex items-center gap-3">
+            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-slate-50">
+              <component
+                :is="iconInfo?.icon"
+                v-if="iconInfo"
+                class="h-9 w-9"
+                :class="iconInfo.color"
+                aria-hidden="true"
+              />
+            </div>
+            <div class="min-w-0">
+              <div class="truncate text-sm font-medium text-slate-900">{{ file.name }}</div>
+              <div class="text-xs text-slate-500">
+                {{ iconInfo?.label ?? 'File' }}<span v-if="extension"> · .{{ extension }}</span>
+              </div>
+            </div>
+          </div>
           <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600">
-            <dt class="font-medium text-slate-500">Name</dt>
-            <dd class="truncate text-slate-900">{{ file.name }}</dd>
+            <dt class="font-medium text-slate-500">Created</dt>
+            <dd class="text-slate-900">{{ new Date(file.createdAt).toLocaleString() }}</dd>
             <dt class="font-medium text-slate-500">Updated</dt>
             <dd class="text-slate-900">{{ new Date(file.updatedAt).toLocaleString() }}</dd>
             <dt class="font-medium text-slate-500">ID</dt>

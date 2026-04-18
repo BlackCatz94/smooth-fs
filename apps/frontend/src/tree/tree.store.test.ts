@@ -129,13 +129,32 @@ describe('tree store', () => {
     expect(tree2.expanded.has('r1')).toBe(true);
   });
 
-  it('paginates child fetches via cursor until hasMore=false', async () => {
+  it('expand fetches one page and records hasMore + cursor without eager paging', async () => {
     mocks.getRoot.mockResolvedValue({
       data: { items: [mockFolder('r1')] },
       meta: { requestId: 'req-root', hasMore: false, cursor: null },
     });
-    // First page: hasMore=true + cursor -> triggers a second call.
-    // Second page: hasMore=false -> loop exits.
+    mocks.getChildren.mockResolvedValueOnce({
+      data: { items: [mockFolder('c1', 'r1'), mockFolder('c2', 'r1')] },
+      meta: { requestId: 'req-page-1', hasMore: true, cursor: 'cur-1' },
+    });
+
+    const tree = useTreeStore();
+    await tree.loadRoot();
+    await tree.toggleExpand('r1');
+
+    // Exactly ONE fetch — the store must not eagerly drain every page.
+    expect(mocks.getChildren).toHaveBeenCalledTimes(1);
+    expect(tree.children['r1']).toEqual(['c1', 'c2']);
+    expect(tree.childrenHasMore['r1']).toBe(true);
+    expect(tree.childrenCursor['r1']).toBe('cur-1');
+  });
+
+  it('loadMoreChildren fetches the next page using the stored cursor and merges', async () => {
+    mocks.getRoot.mockResolvedValue({
+      data: { items: [mockFolder('r1')] },
+      meta: { requestId: 'req-root', hasMore: false, cursor: null },
+    });
     mocks.getChildren
       .mockResolvedValueOnce({
         data: { items: [mockFolder('c1', 'r1'), mockFolder('c2', 'r1')] },
@@ -149,11 +168,31 @@ describe('tree store', () => {
     const tree = useTreeStore();
     await tree.loadRoot();
     await tree.toggleExpand('r1');
+    await tree.loadMoreChildren('r1');
 
     expect(mocks.getChildren).toHaveBeenCalledTimes(2);
-    // Second call must forward the cursor from the first page.
     expect(mocks.getChildren.mock.calls[1]?.[1]).toMatchObject({ cursor: 'cur-1' });
     expect(tree.children['r1']).toEqual(['c1', 'c2', 'c3']);
+    expect(tree.childrenHasMore['r1']).toBe(false);
+  });
+
+  it('loadMoreChildren is a no-op when hasMore is false', async () => {
+    mocks.getRoot.mockResolvedValue({
+      data: { items: [mockFolder('r1')] },
+      meta: { requestId: 'req-root', hasMore: false, cursor: null },
+    });
+    mocks.getChildren.mockResolvedValueOnce({
+      data: { items: [mockFolder('c1', 'r1')] },
+      meta: { requestId: 'req-page-1', hasMore: false, cursor: null },
+    });
+
+    const tree = useTreeStore();
+    await tree.loadRoot();
+    await tree.toggleExpand('r1');
+
+    mocks.getChildren.mockClear();
+    await tree.loadMoreChildren('r1');
+    expect(mocks.getChildren).not.toHaveBeenCalled();
   });
 
   it('normalizes errors into UiError with op label', async () => {

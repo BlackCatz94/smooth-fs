@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { loadEnv, resetEnvCache } from '../../env';
+import { InvalidEnvError, loadEnv, resetEnvCache } from '../../env';
 import { createDbHandle, type DbHandle } from './db';
 import { files, folders } from './schema';
 
@@ -78,7 +78,20 @@ export async function seedFixture(
 
 if (import.meta.main) {
   resetEnvCache();
-  const env = loadEnv();
+  let env: ReturnType<typeof loadEnv>;
+  try {
+    env = loadEnv();
+  } catch (err) {
+    if (err instanceof InvalidEnvError) {
+      console.error('Invalid environment configuration:');
+      for (const [key, msgs] of Object.entries(err.fieldErrors)) {
+        if (msgs && msgs.length > 0) console.error(`  ${key}: ${msgs.join('; ')}`);
+      }
+    } else {
+      console.error('seed failed', err);
+    }
+    process.exit(1);
+  }
   const handle = createDbHandle(env);
   try {
     const result = await seedFixture(handle, {

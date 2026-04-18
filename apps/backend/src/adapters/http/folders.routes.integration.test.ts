@@ -281,6 +281,86 @@ describe('GET /api/v1/folders/search', () => {
   });
 });
 
+describe('DELETE /api/v1/folders/:id', () => {
+  it('soft-deletes the subtree and returns 204 No Content', async () => {
+    if (!harness) return;
+    const { rootId } = await seedFixture(harness.handle, {
+      depth: 0,
+      width: 3,
+      filesPerFolder: 2,
+    });
+    const wide0 = await harness.handle.db
+      .select()
+      .from(folders)
+      .where(sql`${folders.name} = 'wide-0000'`);
+    const wideId = wide0[0]!.id;
+
+    const del = await hit(`/api/v1/folders/${wideId}`, {
+      method: 'DELETE',
+      headers: { 'x-request-id': 'test-req-delete' },
+    });
+    expect(del.status).toBe(204);
+    expect(del.headers.get('x-request-id')).toBe('test-req-delete');
+    // 204 must have an empty body per the spec.
+    expect((await del.text()).length).toBe(0);
+
+    // Deleted row is hidden from subsequent reads.
+    const listRes = await hit(`/api/v1/folders/${rootId}/children`);
+    const names = (
+      await readJson<{ items: { name: string }[] }>(listRes)
+    ).data.items.map((f) => f.name);
+    expect(names).not.toContain('wide-0000');
+  });
+
+  it('restore after delete brings the subtree back', async () => {
+    if (!harness) return;
+    const { rootId } = await seedFixture(harness.handle, {
+      depth: 0,
+      width: 2,
+      filesPerFolder: 1,
+    });
+    const wide0 = await harness.handle.db
+      .select()
+      .from(folders)
+      .where(sql`${folders.name} = 'wide-0000'`);
+    const wideId = wide0[0]!.id;
+
+    const del = await hit(`/api/v1/folders/${wideId}`, { method: 'DELETE' });
+    expect(del.status).toBe(204);
+
+    const restore = await hit(`/api/v1/folders/${wideId}/restore`, {
+      method: 'POST',
+    });
+    expect(restore.status).toBe(200);
+    const parsed = folderRestoreDataSchema.parse((await readJson(restore)).data);
+    expect(parsed.foldersRestored).toBe(1);
+    expect(parsed.filesRestored).toBe(1);
+
+    const listAfter = await hit(`/api/v1/folders/${rootId}/children`);
+    const namesAfter = (
+      await readJson<{ items: { name: string }[] }>(listAfter)
+    ).data.items.map((f) => f.name);
+    expect(namesAfter).toContain('wide-0000');
+  });
+
+  it('404s when the folder does not exist', async () => {
+    if (!harness) return;
+    const res = await hit(
+      '/api/v1/folders/00000000-0000-0000-0000-000000000000',
+      { method: 'DELETE' },
+    );
+    expect(res.status).toBe(404);
+    const body = apiErrorBodySchema.parse(await res.json());
+    expect(body.error.code).toBe('FOLDER_NOT_FOUND');
+  });
+
+  it('422s when the id is not a UUID', async () => {
+    if (!harness) return;
+    const res = await hit('/api/v1/folders/not-a-uuid', { method: 'DELETE' });
+    expect(res.status).toBe(422);
+  });
+});
+
 describe('POST /api/v1/folders/:id/restore', () => {
   it('undoes a soft-delete event for the full subtree', async () => {
     if (!harness) return;

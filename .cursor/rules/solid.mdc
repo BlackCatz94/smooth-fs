@@ -1,0 +1,86 @@
+---
+description: SOLID principles for SmoothFS — every new/changed module must justify its shape against these five checks
+alwaysApply: true
+---
+
+# SOLID — Non-negotiable across backend + frontend
+
+Apply to every function, class, Vue component, Pinia store, Elysia controller, use-case, and adapter. If a change violates one of these, call it out in your response before coding.
+
+## S — Single Responsibility
+
+One module = one reason to change. If a file mixes HTTP parsing, business rules, and SQL, split it.
+
+```ts
+// BAD: controller does validation + business + SQL
+.delete('/:id', async ({ params, db }) => {
+  if (!uuid(params.id)) throw 400;
+  const row = await db.select()...;
+  if (row.deletedAt) throw 404;
+  await db.update(...).set({ deletedAt: new Date() });
+})
+
+// GOOD: controller → use-case → repository
+.delete('/:id', async ({ params }) => {
+  const { id } = folderIdParamSchema.parse(params);
+  await services.softDeleteFolder.exec({ folderId: id });
+})
+```
+
+## O — Open/Closed
+
+Extend via new types/adapters, not by editing existing branches. Prefer a registry or strategy over a growing `switch`.
+
+```ts
+// BAD: every new extension edits this function
+function iconFor(ext: string) {
+  if (ext === '.pdf') return FileText;
+  if (ext === '.csv') return FileSpreadsheet;
+  // ...keeps growing
+}
+
+// GOOD: lookup table — new extensions are data, not code edits
+const ICONS: Record<string, Icon> = { '.pdf': FileText, '.csv': FileSpreadsheet };
+const iconFor = (ext: string) => ICONS[ext] ?? FileText;
+```
+
+## L — Liskov Substitution
+
+Any implementation of a port must be swappable with no surprises. `NullCache` and `RedisCache` both honor the same contract (including `ping()` → `'ok' | 'down' | 'skipped'`). Never narrow pre-conditions or widen post-conditions in a subtype.
+
+## I — Interface Segregation
+
+Ports expose only what one caller needs. Don't bolt a `purge()` onto the `Cache` port because one script wants it — make a separate `CacheAdmin` port.
+
+```ts
+// BAD: every consumer drags along methods it never calls
+interface Cache { get; set; ping; purge; rebuildIndex; exportSnapshot; }
+
+// GOOD
+interface Cache { get; set; invalidatePattern; ping; close; }
+interface CacheAdmin extends Cache { purge; exportSnapshot; }
+```
+
+## D — Dependency Inversion
+
+Use-cases/components depend on **ports / props / injected stores**, never on concrete adapters. Wiring happens at the edge (`src/container.ts`, `main.ts`, test harness).
+
+```ts
+// BAD: use-case imports Drizzle directly
+import { db } from '../adapters/db/client';
+
+// GOOD: use-case takes a FolderRepository port
+export const softDeleteFolder = (repo: FolderRepository) => ({
+  exec: ({ folderId }) => repo.softDelete(folderId),
+});
+```
+
+## Quick self-check before you commit
+
+1. Does this file have exactly one reason to change?
+2. Can I add the next variant without editing existing branches?
+3. Could I swap the implementation in a test without breaking callers?
+4. Does the consumer see only the methods it actually uses?
+5. Does this module import an abstraction, not a concrete adapter?
+
+If any answer is "no", fix it now or surface the trade-off explicitly — don't let it rot.
